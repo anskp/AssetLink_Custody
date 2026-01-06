@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Spinner animation for minting progress */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@layer base {
+  body {
+    background-color: #000000;
+    color: #FFFFFF;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  input, button, select, textarea {
+    background-color: #000000;
+    color: #FFFFFF;
+    border: 1px solid #FFFFFF;
+    border-radius: 0;
+    padding: 0.5rem 1rem;
+  }
+
+  input:focus, button:focus, select:focus, textarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 1px #FFFFFF;
+  }
+
+  button {
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  button:hover {
+    background-color: #FFFFFF;
+    color: #000000;
+  }
+
+  h1 { 
+    font-size: 2.25rem;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  
+  h2 { 
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  
+  h3 { 
+    font-size: 1.25rem;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+}
+
+.brutal-border {
+  border: 1px solid #FFFFFF;
+}
+
+.brutal-card {
+  border: 1px solid #FFFFFF;
+  padding: 1.5rem;
+  background-color: #000000;
+}
