@@ -842,16 +842,60 @@ paths:
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               type: object
               required:
                 - assetId
+                - assetName
+                - category
+                - storageType
+                - estimatedValue
+                - currency
+                - ownershipDocument
+                - assetImages
               properties:
                 assetId:
                   type: string
                   description: Unique identifier for the asset
                   example: "property_001"
+                assetName:
+                  type: string
+                  description: Name of the asset
+                  example: "Gold Bar 100g"
+                category:
+                  type: string
+                  description: Asset category (WATCH, ART, PRECIOUS_METAL, etc.)
+                  example: "PRECIOUS_METAL"
+                description:
+                  type: string
+                  description: Detailed description of the asset
+                storageType:
+                  type: string
+                  description: Where the asset is stored (e.g., Issuer Custody)
+                  example: "Issuer Custody"
+                estimatedValue:
+                  type: number
+                  description: Estimated value of the asset
+                  example: 850000
+                currency:
+                  type: string
+                  description: Currency code
+                  example: "INR"
+                ownershipDocument:
+                  type: string
+                  format: binary
+                  description: Proof of ownership document (PDF/Image)
+                assetImages:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: Real images of the asset
+                assetVideo:
+                  type: string
+                  format: binary
+                  description: Optional proof video
       responses:
         '201':
           description: Asset linked successfully

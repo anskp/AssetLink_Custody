@@ -138,6 +138,10 @@ model AssetMetadata {
   // Documents and Images
   documents         Json     // Array of document references
   images            Json     // Array of image URLs
+  assetFiles        AssetFile[]
+  
+  // Storage and Custody
+  storageType       String?  // Issuer Custody, Platform Custody, etc.
   
   // Custom metadata
   customFields      Json?
@@ -148,6 +152,20 @@ model AssetMetadata {
   @@index([assetType])
   @@index([custodyRecordId])
   @@map("asset_metadata")
+}
+
+// Asset Files (Detailed File Tracking)
+model AssetFile {
+  id                String   @id @default(uuid())
+  assetMetadataId   String
+  assetMetadata     AssetMetadata @relation(fields: [assetMetadataId], references: [id])
+  fileType          String   // OWNERSHIP, IMAGE, VIDEO
+  filePath          String
+  mimeType          String?
+  uploadedAt        DateTime @default(now())
+
+  @@index([assetMetadataId])
+  @@map("asset_files")
 }
 
 // Maker-Checker Operations

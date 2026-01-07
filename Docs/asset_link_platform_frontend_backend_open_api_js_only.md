@@ -397,20 +397,48 @@ paths:
 
   /v1/assets/link:
     post:
-      summary: Link an asset
+      summary: Link an asset with files
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               type: object
+              required:
+                - assetId
+                - assetName
+                - category
+                - storageType
+                - estimatedValue
+                - currency
+                - ownershipDocument
+                - assetImages
               properties:
                 assetId:
                   type: string
-                vaultId:
+                assetName:
                   type: string
+                category:
+                  type: string
+                storageType:
+                  type: string
+                estimatedValue:
+                  type: number
+                currency:
+                  type: string
+                ownershipDocument:
+                  type: string
+                  format: binary
+                assetImages:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                assetVideo:
+                  type: string
+                  format: binary
       responses:
-        '200':
+        '201':
           description: Asset linked
 
   /v1/tokens/mint:
@@ -457,20 +485,45 @@ security:
 paths:
   /v1/assets/link:
     post:
-      summary: Link an asset
+      summary: Link an asset with files
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               type: object
+              required:
+                - assetId
+                - assetName
+                - category
+                - storageType
+                - estimatedValue
+                - currency
+                - ownershipDocument
+                - assetImages
               properties:
                 assetId:
                   type: string
-                vaultId:
+                assetName:
                   type: string
+                category:
+                  type: string
+                storageType:
+                  type: string
+                estimatedValue:
+                  type: number
+                currency:
+                  type: string
+                ownershipDocument:
+                  type: string
+                  format: binary
+                assetImages:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
       responses:
-        '200':
+        '201':
           description: Asset linked
 
   /v1/tokens/mint:

@@ -11,7 +11,22 @@ import { compareSecret } from '../../utils/crypto.js';
  */
 export const createSignaturePayload = (method, path, timestamp, body) => {
     const bodyString = body ? (typeof body === 'string' ? body : JSON.stringify(body)) : '';
-    return method + path + timestamp + bodyString;
+    const payload = method + path + timestamp + bodyString;
+
+    // Debug logging for signature mismatches
+    if (process.env.NODE_ENV === 'development') {
+        console.log('[HMAC DEBUG] Payload Components:', {
+            method,
+            path,
+            timestamp,
+            bodyType: typeof body,
+            hasBody: !!body,
+            bodyString: bodyString.length > 500 ? bodyString.substring(0, 500) + '...' : bodyString
+        });
+        console.log('[HMAC DEBUG] Final Payload:', payload);
+    }
+
+    return payload;
 };
 
 /**
@@ -60,11 +75,22 @@ export const verifySignature = async (providedSignature, method, path, timestamp
 export const verifySignatureWithSecret = (providedSignature, method, path, timestamp, body, secret) => {
     try {
         const expectedSignature = generateSignature(method, path, timestamp, body, secret);
-        return crypto.timingSafeEqual(
+        const isValid = crypto.timingSafeEqual(
             Buffer.from(providedSignature, 'hex'),
             Buffer.from(expectedSignature, 'hex')
         );
+
+        if (!isValid && process.env.NODE_ENV === 'development') {
+            console.log('[HMAC DEBUG] Signature Mismatch!');
+            console.log('  Provided:', providedSignature);
+            console.log('  Expected:', expectedSignature);
+        }
+
+        return isValid;
     } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+            console.error('[HMAC DEBUG] Verification Error:', error.message);
+        }
         return false;
     }
 };

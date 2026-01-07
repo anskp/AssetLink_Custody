@@ -24,7 +24,9 @@ export const createAssetMetadata = async (custodyRecordId, data) => {
         valuationMethod,
         documents = [],
         images = [],
-        customFields
+        customFields,
+        storageType,
+        files = []
     } = data;
 
     return await prisma.assetMetadata.create({
@@ -43,7 +45,18 @@ export const createAssetMetadata = async (custodyRecordId, data) => {
             valuationMethod,
             documents,
             images,
-            customFields
+            customFields,
+            storageType,
+            assetFiles: files.length > 0 ? {
+                create: files.map(f => ({
+                    fileType: f.fileType,
+                    filePath: f.filePath,
+                    mimeType: f.mimeType
+                }))
+            } : undefined
+        },
+        include: {
+            assetFiles: true
         }
     });
 };
@@ -96,6 +109,18 @@ export const updateAssetMetadata = async (custodyRecordId, data) => {
     if (data.documents !== undefined) updateData.documents = data.documents;
     if (data.images !== undefined) updateData.images = data.images;
     if (data.customFields !== undefined) updateData.customFields = data.customFields;
+    if (data.storageType !== undefined) updateData.storageType = data.storageType;
+
+    // Handle files update if provided
+    if (data.files && data.files.length > 0) {
+        updateData.assetFiles = {
+            create: data.files.map(f => ({
+                fileType: f.fileType,
+                filePath: f.filePath,
+                mimeType: f.mimeType
+            }))
+        };
+    }
 
     return await prisma.assetMetadata.update({
         where: { custodyRecordId },

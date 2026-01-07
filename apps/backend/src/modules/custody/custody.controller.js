@@ -1,10 +1,16 @@
 import * as custodyService from './custody.service.js';
 import { ValidationError } from '../../errors/ValidationError.js';
+import extractFiles from '../../utils/fileExtractor.js';
 
 /**
  * Custody Controller
  * HTTP request handlers for custody endpoints
  */
+
+/**
+ * Helper to extract files from request
+ */
+// Removed: extractFiles is now imported from utils
 
 /**
  * Link asset to custody
@@ -32,6 +38,12 @@ export const linkAsset = async (req, res, next) => {
             throw new ValidationError('X-USER-ID header is required to identify the end user');
         }
 
+        const assetFiles = extractFiles(req.files);
+        const metadata = {
+            ...req.body,
+            files: assetFiles
+        };
+
         const custodyRecord = await custodyService.linkAsset(
             assetId,
             tenantId,
@@ -41,7 +53,7 @@ export const linkAsset = async (req, res, next) => {
                 ipAddress: req.ip,
                 userAgent: req.get('user-agent')
             },
-            req.body // Pass the full body as metadata
+            metadata
         );
 
         res.status(201).json(custodyRecord);
@@ -197,6 +209,12 @@ export const linkAssetDashboard = async (req, res, next) => {
         // For dashboard: user ID is both tenant and creator
         const userId = req.user.sub;
 
+        const assetFiles = extractFiles(req.files);
+        const metadata = {
+            ...req.body,
+            files: assetFiles
+        };
+
         const custodyRecord = await custodyService.linkAsset(
             assetId,
             userId, // tenantId = user's ID
@@ -206,7 +224,7 @@ export const linkAssetDashboard = async (req, res, next) => {
                 ipAddress: req.ip,
                 userAgent: req.get('user-agent')
             },
-            req.body // Pass full body as metadata
+            metadata
         );
 
         res.status(201).json(custodyRecord);

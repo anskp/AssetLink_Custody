@@ -4,6 +4,7 @@ import * as custodyService from '../custody/custody.service.js';
 import { ValidationError } from '../../errors/ValidationError.js';
 import { getAllAssetTypes } from '../../enums/assetType.js';
 import { CustodyStatus } from '../../enums/custodyStatus.js';
+import extractFiles from '../../utils/fileExtractor.js';
 
 /**
  * Asset Controller
@@ -16,24 +17,35 @@ import { CustodyStatus } from '../../enums/custodyStatus.js';
  */
 export const createAsset = async (req, res, next) => {
     try {
-        const { assetId, ...metadata } = req.body;
+        const { assetId, ...restMetadata } = req.body;
+        const files = extractFiles(req.files);
+        const metadata = { ...restMetadata, files };
 
-        // 1. Create a PENDING custody record first to satisfy DB constraints
+        // 1. Create a PENDING custody record
+        const tenantId = req.auth?.tenantId || 'platform_admin';
+        const createdBy = req.auth?.endUserId || 'platform_admin';
+        const actor = req.auth?.publicKey || 'unknown';
+
         const custodyRecord = await custodyService.linkAsset(
             assetId,
-            req.auth?.publicKey || 'unknown',
-            {},
-            CustodyStatus.PENDING
+            tenantId,
+            createdBy,
+            actor,
+            {
+                ipAddress: req.ip,
+                userAgent: req.get('user-agent')
+            },
+            metadata
         );
 
-        // 2. Initiate the LINK_ASSET operation pointing to this record
+        // 2. Initiate the LINK_ASSET operation (for maker-checker log)
         const result = await operationService.initiateOperation(
             {
                 operationType: 'LINK_ASSET',
                 custodyRecordId: custodyRecord.id,
                 payload: { assetId, ...metadata }
             },
-            req.auth?.publicKey || 'unknown',
+            actor,
             {
                 ipAddress: req.ip,
                 userAgent: req.get('user-agent')

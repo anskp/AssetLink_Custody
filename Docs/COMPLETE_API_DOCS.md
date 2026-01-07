@@ -32,7 +32,7 @@ Platform owners see ALL data. End users see only their own data.
 ### 1.1 Link Asset to Custody
 **POST** `/v1/custody/link`
 
-Links a real-world asset to custody system.
+Links a real-world asset to custody system with documentation and images.
 
 **Headers:**
 ```
@@ -40,24 +40,29 @@ X-API-KEY: pk_abc123
 X-USER-ID: issuer_john
 X-SIGNATURE: signature
 X-TIMESTAMP: 1704153600
+Content-Type: multipart/form-data
 ```
 
-**Request Body:**
-```json
-{
-  "assetId": "property_001"
-}
-```
+**Request Body (form-data):**
+| Field | Type | Description | Required |
+| :--- | :--- | :--- | :--- |
+| `assetId` | String | Unique asset identifier | Yes |
+| `assetName` | String | Name of the asset | Yes |
+| `category` | String | Asset category (WATCH, ART, etc.) | Yes |
+| `storageType` | String | Storage location (e.g. Issuer Custody) | Yes |
+| `estimatedValue` | Number | Estimated value in currency | Yes |
+| `currency` | String | Currency code (INR, USD, etc.) | Yes |
+| `ownershipDocument` | File | PDF/Image proof of ownership | Yes |
+| `assetImages` | File[] | Real images of the asset | Yes |
+| `assetVideo` | File | proof video | No |
+| `description` | String | Brief description | No |
 
-**Response (201):**
+**Example Response (201):**
 ```json
 {
   "id": "custody_abc123",
   "assetId": "property_001",
-  "tenantId": "tenant_platform1",
-  "createdBy": "issuer_john",
-  "status": "LINKED",
-  "linkedAt": "2026-01-02T12:00:00Z",
+  "status": "PENDING",
   "createdAt": "2026-01-02T12:00:00Z"
 }
 ```
@@ -485,10 +490,15 @@ curl -X POST http://localhost:3000/v1/custody/link \
   -H "X-USER-ID: issuer_john" \
   -H "X-SIGNATURE: dummy_signature_for_testing" \
   -H "X-TIMESTAMP: $(date +%s)" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "assetId": "property_001"
-  }'
+  -F "assetId=AST_001" \
+  -F "assetName=Gold Bar 100g" \
+  -F "category=PRECIOUS_METAL" \
+  -F "storageType=Issuer Custody" \
+  -F "estimatedValue=850000" \
+  -F "currency=INR" \
+  -F "ownershipDocument=@/path/to/proof.pdf" \
+  -F "assetImages=@/path/to/img1.jpg" \
+  -F "assetImages=@/path/to/img2.jpg"
 ```
 
 ### Step 3: Issuer Creates Mint Operation

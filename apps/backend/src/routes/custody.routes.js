@@ -1,6 +1,7 @@
 import express from 'express';
 import * as custodyController from '../modules/custody/custody.controller.js';
 import { requirePermission, authenticateJwt, authenticate } from '../modules/auth/auth.middleware.js';
+import upload from '../utils/upload.js';
 
 /**
  * Custody Routes
@@ -16,7 +17,15 @@ const router = express.Router();
 // ============================================
 
 // Link asset from dashboard (JWT auth)
-router.post('/dashboard/link', authenticateJwt, custodyController.linkAssetDashboard);
+router.post('/dashboard/link',
+    authenticateJwt,
+    upload.conditionalUpload([
+        { name: 'ownershipDocument', maxCount: 1 },
+        { name: 'assetImages', maxCount: 10 },
+        { name: 'assetVideo', maxCount: 1 }
+    ]),
+    custodyController.linkAssetDashboard
+);
 
 // Approve custody link from dashboard (JWT auth)
 router.post('/dashboard/:id/approve', authenticateJwt, custodyController.approveCustodyLinkDashboard);
@@ -33,7 +42,16 @@ router.get('/dashboard', authenticateJwt, custodyController.listCustodyRecordsDa
 // ============================================
 
 // Link asset to custody (requires write permission)
-router.post('/link', authenticate, requirePermission('write'), custodyController.linkAsset);
+router.post('/link',
+    upload.conditionalUpload([
+        { name: 'ownershipDocument', maxCount: 1 },
+        { name: 'assetImages', maxCount: 10 },
+        { name: 'assetVideo', maxCount: 1 }
+    ]),
+    authenticate,
+    requirePermission('write'),
+    custodyController.linkAsset
+);
 
 // Approve custody link (requires admin permission - CHECKER role)
 router.post('/:id/approve', authenticate, requirePermission('admin'), custodyController.approveCustodyLink);
