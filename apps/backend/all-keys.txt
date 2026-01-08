@@ -1,0 +1,34 @@
+prisma:info Starting a mysql pool with 17 connections.
+prisma:query SELECT `assetlink_custody`.`api_keys`.`id`, `assetlink_custody`.`api_keys`.`publicKey`, `assetlink_custody`.`api_keys`.`role`, `assetlink_custody`.`api_keys`.`isActive`, `assetlink_custody`.`api_keys`.`tenantId` FROM `assetlink_custody`.`api_keys` WHERE 1=1
+[
+  {
+    "publicKey": "ak_45286af868b2b884fd8bdade8e98e5d7",
+    "role": "CHECKER",
+    "isActive": false,
+    "tenantId": "023c9c2f-286c-42b3-9ffc-d0874413e6bf"
+  },
+  {
+    "publicKey": "ak_c909d5a9253acd9e54ef917f66eedf99",
+    "role": "MAKER",
+    "isActive": true,
+    "tenantId": "023c9c2f-286c-42b3-9ffc-d0874413e6bf"
+  },
+  {
+    "publicKey": "ak_943089eb84fce852dd1fe80cb8be44bd",
+    "role": "MAKER",
+    "isActive": false,
+    "tenantId": "023c9c2f-286c-42b3-9ffc-d0874413e6bf"
+  },
+  {
+    "publicKey": "ak_779d5264825cf1e8ca6c84b9d58cc904",
+    "role": "MAKER",
+    "isActive": false,
+    "tenantId": "8bba35e6-e618-478c-8e7f-5228932f38bb"
+  },
+  {
+    "publicKey": "ak_0f6bf9ab66a61cd598e709b65357856d",
+    "role": "CHECKER",
+    "isActive": true,
+    "tenantId": "023c9c2f-286c-42b3-9ffc-d0874413e6bf"
+  }
+]

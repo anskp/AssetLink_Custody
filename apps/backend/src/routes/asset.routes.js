@@ -29,9 +29,9 @@ router.get('/search', requirePermission('read'), assetController.searchAssets);
 router.get('/types/:type', requirePermission('read'), assetController.getAssetsByType);
 
 // Record management (Write/Admin permission)
-router.post('/', requirePermission('write'), assetController.createAsset);
-router.get('/:assetId', requirePermission('read'), assetController.getAssetDetails);
-router.patch('/:assetId', requirePermission('write'), assetController.updateAsset);
-router.post('/:assetId/verify', requirePermission('admin'), assetController.verifyAsset);
+router.post('/', authenticate, requirePermission('write'), assetController.createAsset);
+router.get('/:assetId', authenticate, requirePermission('read'), assetController.getAssetDetails);
+router.patch('/:assetId', authenticate, requirePermission('write'), assetController.updateAsset);
+router.post('/:assetId/verify', authenticate, requirePermission('admin'), assetController.verifyAsset);
 
 export default router;

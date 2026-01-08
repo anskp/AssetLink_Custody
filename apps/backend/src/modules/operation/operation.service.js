@@ -12,6 +12,7 @@ import { CustodyStatus } from '../../enums/custodyStatus.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../errors/ApiError.js';
 import logger from '../../utils/logger.js';
 import prisma from '../../config/db.js';
+import { mapToFireblocksAsset } from '../../utils/blockchain.js';
 
 /**
  * Operation Service
@@ -283,7 +284,7 @@ export const executeOperation = async (operationId, actor, context = {}) => {
                 tokenName: operation.payload.tokenName || operation.payload.name,
                 totalSupply: operation.payload.totalSupply,
                 decimals: operation.payload.decimals,
-                blockchainId: operation.payload.blockchainId,
+                blockchainId: mapToFireblocksAsset(operation.payload.blockchainId),
                 vaultWalletId: numericVaultId
             };
 

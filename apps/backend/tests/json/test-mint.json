@@ -1,9 +1,9 @@
 {
-  "assetId": "ROLEX-2025-001",
-  "tokenSymbol": "RLXSUB",
-  "tokenName": "Rolex Submariner Token",
-  "totalSupply": "1",
-  "decimals": "0",
-  "blockchainId": "ETH_TEST5",
-  "vaultWalletId": "f42671b6-b60b-4bca-909e-ef60b517c8e6"
+  "assetId": "58",
+  "tokenSymbol": "MSH",
+  "tokenName": "marshll",
+  "totalSupply": "14",
+  "decimals": "18",
+  "blockchainId": "11155111",
+  "vaultWalletId": "f2ec79e0-c080-4820-94bc-a7db02e4165f"
 }

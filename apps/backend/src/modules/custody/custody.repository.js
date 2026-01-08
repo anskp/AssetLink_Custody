@@ -29,12 +29,15 @@ export const createCustodyRecord = async (assetId, tenantId, createdBy, status =
  * Find custody record by asset ID
  */
 export const findByAssetId = async (assetId) => {
-    return await prisma.custodyRecord.findUnique({
+    console.log(`[DEBUG] findByAssetId querying for: "${assetId}" (type: ${typeof assetId})`);
+    const result = await prisma.custodyRecord.findUnique({
         where: { assetId: String(assetId) },
         include: {
             vaultWallet: true
         }
     });
+    console.log(`[DEBUG] findByAssetId result:`, result ? 'FOUND' : 'NOT_FOUND');
+    return result;
 };
 
 /**

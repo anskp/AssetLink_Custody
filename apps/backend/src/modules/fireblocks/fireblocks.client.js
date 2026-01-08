@@ -22,24 +22,24 @@ export const isConfigured = () => {
  */
 const withRetry = async (operation, maxAttempts = 3) => {
   let lastError;
-  
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await operation();
     } catch (error) {
       lastError = error;
-      
+
       // Check if error is retryable (network timeout, rate limit)
-      const isRetryable = 
+      const isRetryable =
         error.code === 'ETIMEDOUT' ||
         error.code === 'ECONNRESET' ||
         error.message?.includes('timeout') ||
         error.message?.includes('rate limit');
-      
+
       if (!isRetryable || attempt === maxAttempts) {
         throw error;
       }
-      
+
       // Exponential backoff: 1s, 2s, 4s
       const delay = Math.pow(2, attempt - 1) * 1000;
       logger.warn(`Fireblocks API call failed, retrying in ${delay}ms`, {
@@ -47,11 +47,11 @@ const withRetry = async (operation, maxAttempts = 3) => {
         maxAttempts,
         error: error.message
       });
-      
+
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
-  
+
   throw lastError;
 };
 
@@ -68,7 +68,7 @@ export const createVault = async (vaultName, customerRefId) => {
       name: vaultName
     };
   }
-  
+
   const fireblocks = getFireblocksClient();
   if (!fireblocks) {
     logger.warn('SIMULATION: Creating mock vault (Fireblocks SDK not initialized)');
@@ -78,7 +78,7 @@ export const createVault = async (vaultName, customerRefId) => {
       name: vaultName
     };
   }
-  
+
   try {
     const response = await withRetry(async () => {
       return await fireblocks.vaults.createVaultAccount({
@@ -90,12 +90,12 @@ export const createVault = async (vaultName, customerRefId) => {
         }
       });
     });
-    
+
     logger.info('Vault created successfully', {
       vaultId: response.data.id,
       vaultName: response.data.name
     });
-    
+
     return {
       id: response.data.id,
       name: response.data.name
@@ -121,7 +121,7 @@ export const createWallet = async (vaultId, blockchain) => {
       address: `0xmock_${blockchain}_${vaultId.slice(-8)}`
     };
   }
-  
+
   const fireblocks = getFireblocksClient();
   if (!fireblocks) {
     logger.warn('SIMULATION: Creating mock wallet (Fireblocks SDK not initialized)');
@@ -130,7 +130,7 @@ export const createWallet = async (vaultId, blockchain) => {
       address: `0xmock_${blockchain}_${vaultId.slice(-8)}`
     };
   }
-  
+
   try {
     // Create the asset in the vault
     await withRetry(async () => {
@@ -139,7 +139,7 @@ export const createWallet = async (vaultId, blockchain) => {
         assetId: blockchain
       });
     });
-    
+
     // Create a deposit address for the asset
     const addressResponse = await withRetry(async () => {
       return await fireblocks.vaults.createVaultAccountAssetAddress({
@@ -150,15 +150,15 @@ export const createWallet = async (vaultId, blockchain) => {
         }
       });
     });
-    
+
     const address = addressResponse.data.address || addressResponse.data.legacyAddress;
-    
+
     logger.info('Wallet created successfully', {
       vaultId,
       blockchain,
       address
     });
-    
+
     return {
       blockchain,
       address
@@ -171,7 +171,7 @@ export const createWallet = async (vaultId, blockchain) => {
           vaultAccountId: vaultId,
           assetId: blockchain
         });
-        
+
         if (addresses.data.addresses?.length > 0) {
           const address = addresses.data.addresses[0].address;
           logger.info('Wallet already exists, returning existing address', {
@@ -179,7 +179,7 @@ export const createWallet = async (vaultId, blockchain) => {
             blockchain,
             address
           });
-          
+
           return {
             blockchain,
             address
@@ -193,7 +193,7 @@ export const createWallet = async (vaultId, blockchain) => {
         });
       }
     }
-    
+
     logger.error('Failed to create wallet', {
       vaultId,
       blockchain,
@@ -565,11 +565,45 @@ export const getTokenizationStatus = async (tokenLinkId) => {
   }
 };
 
+/**
+ * Mint additional tokens for an existing token link
+ */
+export const mintTokens = async (tokenId, vaultAccountId, amount) => {
+  if (!isConfigured()) {
+    logger.warn('SIMULATION: Minting mock tokens (Fireblocks not configured)');
+    return {
+      id: `mock_mint_${Date.now()}`,
+      status: 'COMPLETED'
+    };
+  }
+
+  try {
+    const payload = {
+      vaultAccountId: String(vaultAccountId),
+      amount: String(amount)
+    };
+
+    logger.info('Minting additional tokens on Fireblocks...', { tokenId, vaultAccountId, amount });
+    const result = await makeFireblocksRequest(`/v1/tokenization/tokens/${tokenId}/mint`, 'POST', payload);
+
+    console.log('\n🔥 FIREBLOCKS MINT RESPONSE:');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(JSON.stringify(result, null, 2));
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    return result;
+  } catch (error) {
+    logger.error('Failed to mint tokens', { tokenId, error: error.message });
+    throw new Error(`Token minting failed: ${error.message}`);
+  }
+};
+
 export default {
   isConfigured,
   createVault,
   createWallet,
   getVaultDetails,
   issueToken,
-  getTokenizationStatus
+  getTokenizationStatus,
+  mintTokens
 };

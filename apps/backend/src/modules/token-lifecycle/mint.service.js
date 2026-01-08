@@ -10,6 +10,7 @@ import * as custodyRepository from '../custody/custody.repository.js';
 import * as auditService from '../audit/audit.service.js';
 import { CustodyStatus } from '../../enums/custodyStatus.js';
 import { NotFoundError, BadRequestError } from '../../errors/ApiError.js';
+import { mapToFireblocksAsset } from '../../utils/blockchain.js';
 import logger from '../../utils/logger.js';
 
 // Fixed gas vault ID
@@ -75,9 +76,14 @@ export const mintToken = async (mintData, actor, context = {}) => {
     throw NotFoundError(`Asset ${assetId} not found in custody`);
   }
 
-  // Validate asset is in LINKED status
-  if (custodyRecord.status !== CustodyStatus.LINKED) {
-    throw BadRequestError(`Asset must be in LINKED status. Current status: ${custodyRecord.status}`);
+  // Validate asset is in LINKED or MINTED status (for additional minting)
+  if (custodyRecord.status !== CustodyStatus.LINKED && custodyRecord.status !== CustodyStatus.MINTED) {
+    throw BadRequestError(`Asset must be in LINKED or MINTED status. Current status: ${custodyRecord.status}`);
+  }
+
+  // If status is MINTED, ensure it has a tokenId for additional minting
+  if (custodyRecord.status === CustodyStatus.MINTED && !custodyRecord.tokenId) {
+    throw BadRequestError('Asset is already marked as MINTED but has no tokenId for additional minting');
   }
 
   // Check if a mint operation is already in progress for this asset
@@ -93,11 +99,15 @@ export const mintToken = async (mintData, actor, context = {}) => {
     assetId
   });
 
+  // Calculate total supply in wei for Fireblocks
+  const decimalsInt = parseInt(decimals) || 18;
+  const totalSupplyWei = (BigInt(totalSupply) * BigInt(10 ** decimalsInt)).toString();
+
   // Prepare token configuration
   const tokenConfig = {
     name: tokenName,
     symbol: tokenSymbol,
-    decimals: parseInt(decimals) || 18,
+    decimals: decimalsInt,
     totalSupply: totalSupply.toString(),
     blockchainId: blockchainId
   };
@@ -112,13 +122,34 @@ export const mintToken = async (mintData, actor, context = {}) => {
     // Check if the vault has sufficient gas, and if not, transfer from vault 88
     await ensureGasForVault(vaultWalletId, blockchainId);
 
-    // Issue token via Fireblocks
-    const result = await fireblocksService.issueToken(vaultWalletId, tokenConfig);
-    
-    logger.info('Token mint initiated successfully', {
+    let result;
+    const existingTokenId = custodyRecord.tokenId;
+
+    if (existingTokenId) {
+      logger.info('Asset already has a tokenId, minting additional tokens', {
+        assetId,
+        tokenId: existingTokenId,
+        amount: totalSupplyWei
+      });
+
+      // Mint additional tokens via Fireblocks Tokenization Engine
+      const mintResult = await fireblocksService.mintTokens(existingTokenId, vaultWalletId, totalSupplyWei);
+
+      result = {
+        tokenLinkId: existingTokenId, // For additional mints, the link ID is the tokenId itself
+        status: mintResult.status || 'PENDING_APPROVAL'
+      };
+    } else {
+      logger.info('Asset has no tokenId, issuing new token deployment', { assetId });
+      // Issue new token deployment via Fireblocks
+      result = await fireblocksService.issueToken(vaultWalletId, tokenConfig);
+    }
+
+    logger.info('Token mint operation initiated successfully', {
       tokenLinkId: result.tokenLinkId,
       assetId,
-      tokenSymbol
+      tokenSymbol,
+      type: existingTokenId ? 'ADDITIONAL_MINT' : 'INITIAL_DEPLOYMENT'
     });
 
     // Log audit event
@@ -202,7 +233,8 @@ const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds (increased 
  */
 const ensureGasForVault = async (vaultId, blockchainId) => {
   try {
-    const cacheKey = `${vaultId}-${blockchainId}`;
+    const mappedAssetId = mapToFireblocksAsset(blockchainId);
+    const cacheKey = `${vaultId}-${mappedAssetId}`;
     const now = Date.now();
 
     // Check if we have a recent cache entry
@@ -211,7 +243,7 @@ const ensureGasForVault = async (vaultId, blockchainId) => {
       if (now - cacheEntry.timestamp < CACHE_DURATION) {
         logger.info('Using cached gas balance for vault', {
           vaultId,
-          blockchainId,
+          blockchainId: mappedAssetId,
           balance: cacheEntry.balance
         });
 
@@ -222,13 +254,13 @@ const ensureGasForVault = async (vaultId, blockchainId) => {
       }
     }
 
-    logger.info('Checking gas balance for vault', { vaultId, blockchainId });
+    logger.info('Checking gas balance for vault', { vaultId, blockchainId: mappedAssetId });
 
     // Get vault account information to check gas balance
     const vaultInfo = await fireblocksService.getVaultDetails(vaultId);
 
     // Find the gas asset (e.g., ETH_TEST5 for Ethereum testnets)
-    const gasAsset = vaultInfo.wallets.find(wallet => wallet.blockchain === blockchainId);
+    const gasAsset = vaultInfo.wallets.find(wallet => wallet.blockchain === mappedAssetId);
     const gasBalance = parseFloat(gasAsset?.balance || '0');
 
     // Update cache with the new balance
@@ -254,16 +286,16 @@ const ensureGasForVault = async (vaultId, blockchainId) => {
       const transferResult = await vaultFireblocksService.transferTokens(
         GAS_VAULT_ID,  // Source: gas vault
         vaultId,       // Destination: target vault
-        blockchainId,  // Asset to transfer (gas token)
+        mappedAssetId, // Asset to transfer (gas token)
         transferAmount // Amount to transfer
       );
-      
+
       logger.info('Gas transfer initiated', {
         transferId: transferResult,
         fromVault: GAS_VAULT_ID,
         toVault: vaultId,
         amount: transferAmount,
-        asset: blockchainId
+        asset: mappedAssetId
       });
 
       // Wait for gas transfer to complete before proceeding
@@ -274,7 +306,7 @@ const ensureGasForVault = async (vaultId, blockchainId) => {
         balance: gasBalance + transferAmount,
         timestamp: Date.now()
       });
-      
+
       logger.info('Gas transfer completed successfully', {
         transferId: transferResult,
         vaultId,
@@ -284,13 +316,13 @@ const ensureGasForVault = async (vaultId, blockchainId) => {
       logger.info('Sufficient gas available in vault', {
         vaultId,
         balance: gasBalance,
-        blockchainId
+        blockchainId: mappedAssetId
       });
     }
   } catch (error) {
     logger.error('Error ensuring gas for vault', {
       vaultId,
-      blockchainId,
+      blockchainId: mapToFireblocksAsset(blockchainId),
       error: error.message
     });
     // Don't throw error - continue with minting even if gas transfer fails
@@ -347,7 +379,7 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log(JSON.stringify(statusData, null, 2));
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-      
+
       logger.info('Mint status update', {
         tokenLinkId,
         status: currentStatus,
@@ -460,8 +492,8 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
 
       // If it's a rate limit error or authentication error, wait longer before retrying
       if (error.message.includes('Too Many Requests') ||
-          error.message.includes('429') ||
-          error.message.includes('Unauthorized')) {
+        error.message.includes('429') ||
+        error.message.includes('Unauthorized')) {
         const rateLimitDelay = 300000; // 5 minutes for rate limit or auth errors
         logger.info('Rate limit or auth error, waiting longer before retry', {
           tokenLinkId,

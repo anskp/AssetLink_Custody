@@ -55,7 +55,7 @@ router.use('/docs', docsRoutes);
 router.use('/custody', custodyRoutes);
 
 // Mount asset metadata routes
-router.use('/assets', authenticate, assetRoutes);
+router.use('/assets', assetRoutes);
 
 // Mount operation routes (authentication handled per-route)
 router.use('/operations', operationRoutes);
