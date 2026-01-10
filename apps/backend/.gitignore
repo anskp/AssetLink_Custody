@@ -16,6 +16,8 @@ dist-ssr
 
 fireblocks_secret.key
 
+storage/assets/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
