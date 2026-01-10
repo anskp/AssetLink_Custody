@@ -123,6 +123,7 @@ router.post('/listings/:listingId/bids', authenticate, marketplaceController.pla
  * Get all bids for a listing
  */
 router.get('/listings/:listingId/bids', authenticate, marketplaceController.getListingBids);
+router.post('/listings/:listingId/purchase', authenticate, marketplaceController.purchaseListing);
 
 /**
  * POST /v1/marketplace/bids/:bidId/accept

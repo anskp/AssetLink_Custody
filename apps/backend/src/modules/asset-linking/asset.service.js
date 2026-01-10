@@ -3,6 +3,7 @@ import * as custodyService from '../custody/custody.service.js';
 import * as auditService from '../audit/audit.service.js';
 import { isValidAssetType } from '../../enums/assetType.js';
 import { BadRequestError, NotFoundError } from '../../errors/ApiError.js';
+import prisma from '../../config/db.js';
 import logger from '../../utils/logger.js';
 
 /**
@@ -20,7 +21,13 @@ export const linkAssetWithMetadata = async (assetId, metadata, actor, context = 
     }
 
     // Link asset to custody first
-    const custodyRecord = await custodyService.linkAsset(assetId, actor, context);
+    const custodyRecord = await custodyService.linkAsset(
+        assetId,
+        context.tenantId, // platform owner
+        actor,            // created by
+        actor,            // authorized by
+        context
+    );
 
     // Create asset metadata
     const assetMetadata = await assetRepository.createAssetMetadata(
@@ -153,6 +160,25 @@ export const getAssetsByType = async (assetType, options = {}) => {
  */
 export const getAssetStatsByType = async () => {
     return await assetRepository.getAssetStatsByType();
+};
+
+/**
+ * Get asset ledger (ownership distribution)
+ */
+export const getAssetLedger = async (assetId) => {
+    const ownerships = await prisma.ownership.findMany({
+        where: { assetId },
+        orderBy: { acquiredAt: 'desc' }
+    });
+
+    return ownerships.map(o => ({
+        owner: o.ownerId,
+        quantity: o.quantity,
+        priceUsd: o.purchasePriceUsd || o.purchasePrice,
+        priceEth: o.purchasePriceEth,
+        currency: o.currency,
+        acquiredAt: o.acquiredAt
+    }));
 };
 
 export default {

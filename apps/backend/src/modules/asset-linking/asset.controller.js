@@ -200,6 +200,34 @@ export const getAssetTypes = async (req, res, next) => {
     }
 };
 
+/**
+ * Get asset ledger
+ * GET /v1/assets/:assetId/ledger
+ */
+export const getAssetLedger = async (req, res, next) => {
+    try {
+        const { assetId } = req.params;
+        const ledger = await assetService.getAssetLedger(assetId);
+
+        // Add a visual representation for terminal-based clients
+        const visual = ledger.map(o => ({
+            "Owner ID": o.owner,
+            "Qty": o.quantity,
+            "Price (USD)": o.priceUsd,
+            "Price (ETH)": o.priceEth,
+            "Date": o.acquiredAt.toISOString().split('T')[0]
+        }));
+
+        res.json({
+            assetId,
+            ledger,
+            _visual: visual // For easy terminal table rendering
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export default {
     createAsset,
     getAssetDetails,

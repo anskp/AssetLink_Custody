@@ -1,5 +1,6 @@
 import prisma from '../../config/db.js';
 import { AssetType } from '../../enums/assetType.js';
+import { convertUsdToEth } from '../../utils/price.js';
 
 /**
  * Asset Repository
@@ -19,6 +20,8 @@ export const createAssetMetadata = async (custodyRecordId, data) => {
         serialNumber,
         yearManufactured,
         estimatedValue = '0',
+        estimatedValueUsd,
+        estimatedValueEth,
         currency = 'USD',
         valuationDate,
         valuationMethod,
@@ -28,6 +31,14 @@ export const createAssetMetadata = async (custodyRecordId, data) => {
         storageType,
         files = []
     } = data;
+
+    // Auto-calculate ETH if only USD is provided
+    let finalEstimatedValueEth = estimatedValueEth;
+    let finalEstimatedValueUsd = estimatedValueUsd || estimatedValue;
+
+    if (estimatedValue && !estimatedValueEth) {
+        finalEstimatedValueEth = convertUsdToEth(estimatedValue);
+    }
 
     return await prisma.assetMetadata.create({
         data: {
@@ -40,6 +51,8 @@ export const createAssetMetadata = async (custodyRecordId, data) => {
             serialNumber,
             yearManufactured,
             estimatedValue,
+            estimatedValueUsd: finalEstimatedValueUsd,
+            estimatedValueEth: finalEstimatedValueEth,
             currency,
             valuationDate: valuationDate ? new Date(valuationDate) : null,
             valuationMethod,
@@ -100,7 +113,13 @@ export const updateAssetMetadata = async (custodyRecordId, data) => {
     if (data.model !== undefined) updateData.model = data.model;
     if (data.serialNumber !== undefined) updateData.serialNumber = data.serialNumber;
     if (data.yearManufactured !== undefined) updateData.yearManufactured = data.yearManufactured;
-    if (data.estimatedValue) updateData.estimatedValue = data.estimatedValue;
+    if (data.estimatedValue) {
+        updateData.estimatedValue = data.estimatedValue;
+        if (!data.estimatedValueUsd) updateData.estimatedValueUsd = data.estimatedValue;
+        if (!data.estimatedValueEth) updateData.estimatedValueEth = convertUsdToEth(data.estimatedValue);
+    }
+    if (data.estimatedValueUsd) updateData.estimatedValueUsd = data.estimatedValueUsd;
+    if (data.estimatedValueEth) updateData.estimatedValueEth = data.estimatedValueEth;
     if (data.currency) updateData.currency = data.currency;
     if (data.valuationDate !== undefined) {
         updateData.valuationDate = data.valuationDate ? new Date(data.valuationDate) : null;

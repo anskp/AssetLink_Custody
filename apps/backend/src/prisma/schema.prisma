@@ -100,6 +100,7 @@ model CustodyRecord {
   operations        CustodyOperation[]
   auditLogs         AuditLog[]
   assetMetadata     AssetMetadata?
+  listings          Listing[]
 
   @@index([assetId])
   @@index([tenantId])
@@ -125,7 +126,9 @@ model AssetMetadata {
   yearManufactured  Int?
   
   // Valuation
-  estimatedValue    String   // Decimal string for precision
+  estimatedValue    String   // Existing field (default to USD)
+  estimatedValueUsd String?  // New USD field
+  estimatedValueEth String?  // New ETH field
   currency          String   @default("USD")
   valuationDate     DateTime?
   valuationMethod   String?
@@ -245,12 +248,15 @@ model Listing {
   id                String   @id @default(uuid())
   assetId           String
   custodyRecordId   String
+  custodyRecord     CustodyRecord @relation(fields: [custodyRecordId], references: [id])
   
   // Two-level isolation
   tenantId          String   // Platform owner
   sellerId          String   // End user (issuer)
   
-  price             String   // Decimal string for precision
+  price             String   // Existing field (default to USD)
+  priceUsd          String?  // New USD price
+  priceEth          String?  // New ETH price
   currency          String   @default("USD")
   quantityListed    String   // Total quantity listed
   quantitySold      String   @default("0") // Quantity sold
@@ -306,7 +312,9 @@ model Ownership {
   ownerId           String   // End user (investor)
   
   quantity          String   // Decimal string for precision
-  purchasePrice     String?  // Price paid
+  purchasePrice     String?  // Existing field (default to USD)
+  purchasePriceUsd  String?  // New USD purchase price
+  purchasePriceEth  String?  // New ETH purchase price
   currency          String   @default("USD")
   
   acquiredAt        DateTime @default(now())

@@ -1,0 +1,8 @@
+{
+    "assetId": "ROLEX-PRICE-TEST-001",
+    "assetType": "WATCH",
+    "assetName": "Rolex Submariner Price Test",
+    "description": "Verification of automatic price conversion to ETH",
+    "estimatedValue": "20000",
+    "currency": "USD"
+}

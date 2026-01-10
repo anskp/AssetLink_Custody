@@ -6,6 +6,7 @@
 import prisma from '../../config/db.js';
 import * as auditService from '../audit/audit.service.js';
 import { BadRequestError, NotFoundError, ForbiddenError } from '../../errors/ApiError.js';
+import { convertUsdToEth } from '../../utils/price.js';
 import logger from '../../utils/logger.js';
 
 /**
@@ -70,6 +71,8 @@ export const createListing = async (data, sellerId, context = {}) => {
         ownerId: sellerId,
         quantity: quantity || '1',
         purchasePrice: '0', // Initial minting, no purchase price
+        purchasePriceUsd: '0',
+        purchasePriceEth: '0',
         currency: currency || 'USD'
       }
     });
@@ -97,6 +100,8 @@ export const createListing = async (data, sellerId, context = {}) => {
       tenantId: custodyRecord.tenantId,
       sellerId,
       price,
+      priceUsd: price,
+      priceEth: convertUsdToEth(price),
       currency,
       quantityListed: quantity || '1',
       quantitySold: '0',

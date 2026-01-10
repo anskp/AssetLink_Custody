@@ -31,6 +31,7 @@ router.get('/types/:type', requirePermission('read'), assetController.getAssetsB
 // Record management (Write/Admin permission)
 router.post('/', authenticate, requirePermission('write'), assetController.createAsset);
 router.get('/:assetId', authenticate, requirePermission('read'), assetController.getAssetDetails);
+router.get('/:assetId/ledger', authenticate, requirePermission('read'), assetController.getAssetLedger);
 router.patch('/:assetId', authenticate, requirePermission('write'), assetController.updateAsset);
 router.post('/:assetId/verify', authenticate, requirePermission('admin'), assetController.verifyAsset);
 
