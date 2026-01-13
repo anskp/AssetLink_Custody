@@ -1,0 +1,16 @@
+Configuration:
+CWD: C:\Users\anask\Desktop\AssetLink Custody
+API Key: cdfb14c1-72ca-4f26-bd54-32a53b1550a0
+Attemping Key Path: C:\Users\anask\Desktop\AssetLink Custody\apps\backend\fireblocks_secret.key
+Creating token on Fireblocks...
+file:///C:/Users/anask/Desktop/AssetLink%20Custody/apps/backend/scripts/manual_mint_verification.js:160
+console.log('Request Payload:', JSON.stringify(payload, null, 2));
+                                               ^
+
+ReferenceError: payload is not defined
+    at file:///C:/Users/anask/Desktop/AssetLink%20Custody/apps/backend/scripts/manual_mint_verification.js:160:48
+    at ModuleJob.run (node:internal/modules/esm/module_job:271:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:578:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:116:5)
+
+Node.js v22.14.0

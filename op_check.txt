@@ -1,0 +1,80 @@
+🔍 Checking last operation and custody record...
+
+📋 LAST OPERATION:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ID: 3d5c70ae-2822-4848-b0f4-9f96e44a5d04
+Type: MINT
+Status: EXECUTED
+Initiated By: ak_c909d5a9253acd9e54ef917f66eedf99
+Approved By: ak_0f6bf9ab66a61cd598e709b65357856d
+Fireblocks Task ID: b194a507-2adc-4634-acbb-5580abed5fc6
+Failure Reason: N/A
+Executed At: Tue Jan 13 2026 15:51:28 GMT+0530 (India Standard Time)
+Created At: Tue Jan 13 2026 15:50:45 GMT+0530 (India Standard Time)
+Payload: {
+  "assetId": "TEST_ASSET_eae73291-033f-40ee-b3eb-8f208a57f9dc",
+  "decimals": 18,
+  "tokenName": "Test Token eae73291-033f-40ee-b3eb-8f208a57f9dc",
+  "tokenSymbol": "TSTEAE7",
+  "totalSupply": "100",
+  "blockchainId": "11155111"
+}
+
+📦 ASSOCIATED CUSTODY RECORD:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Asset ID: TEST_ASSET_eae73291-033f-40ee-b3eb-8f208a57f9dc
+Status: MINTED
+Vault Wallet ID: 2c6c76b1-828d-4bb0-b820-9959cc157706
+Token ID: b194a507-2adc-4634-acbb-5580abed5fc6
+Token Address: 0xA60d822C4b38417b39A680C963Bba65D6e3d204b
+Blockchain: ETH_TEST5
+Linked At: N/A
+Minted At: Tue Jan 13 2026 15:52:40 GMT+0530 (India Standard Time)
+
+📜 RECENT AUDIT LOGS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. TOKEN_MINTED - 2026-01-13T10:22:41.011Z
+   Actor: SYSTEM
+
+2. TOKEN_MINTED - 2026-01-13T10:22:41.004Z
+   Actor: SYSTEM
+
+3. OPERATION_EXECUTED - 2026-01-13T10:21:28.642Z
+   Actor: system
+
+4. TOKEN_MINT_INITIATED - 2026-01-13T10:21:28.608Z
+   Actor: system
+
+5. OPERATION_APPROVED - 2026-01-13T10:20:45.219Z
+   Actor: ak_0f6bf9ab66a61cd598e709b65357856d
+
+6. OPERATION_CREATED - 2026-01-13T10:20:45.190Z
+   Actor: ak_c909d5a9253acd9e54ef917f66eedf99
+
+7. CUSTODY_APPROVED - 2026-01-13T10:20:45.159Z
+   Actor: ak_0f6bf9ab66a61cd598e709b65357856d
+
+8. ASSET_LINKED - 2026-01-13T10:20:41.908Z
+   Actor: ak_c909d5a9253acd9e54ef917f66eedf99
+
+9. OPERATION_APPROVED - 2026-01-13T10:11:39.516Z
+   Actor: ak_0f6bf9ab66a61cd598e709b65357856d
+
+10. OPERATION_CREATED - 2026-01-13T10:11:39.490Z
+   Actor: ak_c909d5a9253acd9e54ef917f66eedf99
+
+11. CUSTODY_APPROVED - 2026-01-13T10:11:39.458Z
+   Actor: ak_0f6bf9ab66a61cd598e709b65357856d
+
+12. ASSET_LINKED - 2026-01-13T10:11:35.841Z
+   Actor: ak_c909d5a9253acd9e54ef917f66eedf99
+
+13. OPERATION_FAILED - 2026-01-13T09:48:39.440Z
+   Actor: system
+
+14. TOKEN_MINT_FAILED - 2026-01-13T09:48:39.428Z
+   Actor: system
+
+15. OPERATION_APPROVED - 2026-01-13T09:43:37.832Z
+   Actor: ak_0f6bf9ab66a61cd598e709b65357856d

@@ -1,0 +1,84 @@
+≡ƒöì Checking last operation and custody record...
+
+prisma:info Starting a mysql pool with 17 connections.
+prisma:query SELECT `assetlink_custody`.`custody_operations`.`id`, `assetlink_custody`.`custody_operations`.`operationType`, `assetlink_custody`.`custody_operations`.`status`, `assetlink_custody`.`custody_operations`.`custodyRecordId`, `assetlink_custody`.`custody_operations`.`vaultWalletId`, `assetlink_custody`.`custody_operations`.`payload`, `assetlink_custody`.`custody_operations`.`initiatedBy`, `assetlink_custody`.`custody_operations`.`approvedBy`, `assetlink_custody`.`custody_operations`.`rejectedBy`, `assetlink_custody`.`custody_operations`.`rejectionReason`, `assetlink_custody`.`custody_operations`.`fireblocksTaskId`, `assetlink_custody`.`custody_operations`.`txHash`, `assetlink_custody`.`custody_operations`.`executedAt`, `assetlink_custody`.`custody_operations`.`failureReason`, `assetlink_custody`.`custody_operations`.`idempotencyKey`, `assetlink_custody`.`custody_operations`.`createdAt`, `assetlink_custody`.`custody_operations`.`updatedAt` FROM `assetlink_custody`.`custody_operations` WHERE 1=1 ORDER BY `assetlink_custody`.`custody_operations`.`createdAt` DESC LIMIT ? OFFSET ?
+prisma:query SELECT `assetlink_custody`.`custody_records`.`id`, `assetlink_custody`.`custody_records`.`assetId`, `assetlink_custody`.`custody_records`.`status`, `assetlink_custody`.`custody_records`.`tenantId`, `assetlink_custody`.`custody_records`.`createdBy`, `assetlink_custody`.`custody_records`.`blockchain`, `assetlink_custody`.`custody_records`.`tokenStandard`, `assetlink_custody`.`custody_records`.`tokenAddress`, `assetlink_custody`.`custody_records`.`tokenId`, `assetlink_custody`.`custody_records`.`quantity`, `assetlink_custody`.`custody_records`.`vaultWalletId`, `assetlink_custody`.`custody_records`.`linkedAt`, `assetlink_custody`.`custody_records`.`mintedAt`, `assetlink_custody`.`custody_records`.`withdrawnAt`, `assetlink_custody`.`custody_records`.`burnedAt`, `assetlink_custody`.`custody_records`.`createdAt`, `assetlink_custody`.`custody_records`.`updatedAt` FROM `assetlink_custody`.`custody_records` WHERE `assetlink_custody`.`custody_records`.`id` IN (?)
+≡ƒôï LAST OPERATION:
+ΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöü
+ID: 7f1a5996-5a19-4880-948c-1e6967882a6c
+Type: MINT
+Status: EXECUTED
+Initiated By: ak_c909d5a9253acd9e54ef917f66eedf99
+Approved By: ak_0f6bf9ab66a61cd598e709b65357856d
+Fireblocks Task ID: fe52e71b-d43d-4d56-9dd0-5944a3f36956
+Failure Reason: N/A
+Executed At: Tue Jan 13 2026 14:21:15 GMT+0530 (India Standard Time)
+Created At: Tue Jan 13 2026 14:20:43 GMT+0530 (India Standard Time)
+Payload: {
+  "assetId": "TEST_ASSET_adf92a9b-2d2e-4a99-8e55-3739bbd509f6",
+  "decimals": 18,
+  "tokenName": "Test Token adf92a9b-2d2e-4a99-8e55-3739bbd509f6",
+  "tokenSymbol": "TSTADF9",
+  "totalSupply": "100",
+  "blockchainId": "11155111"
+}
+
+≡ƒôª ASSOCIATED CUSTODY RECORD:
+ΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöü
+Asset ID: TEST_ASSET_adf92a9b-2d2e-4a99-8e55-3739bbd509f6
+Status: LINKED
+Vault Wallet ID: 10b2ef76-31b5-4d79-beb2-2880b811ecd7
+Token ID: N/A
+Token Address: N/A
+Blockchain: N/A
+Linked At: N/A
+Minted At: N/A
+
+≡ƒô£ RECENT AUDIT LOGS:
+ΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöü
+prisma:query SELECT `assetlink_custody`.`audit_logs`.`id`, `assetlink_custody`.`audit_logs`.`custodyRecordId`, `assetlink_custody`.`audit_logs`.`operationId`, `assetlink_custody`.`audit_logs`.`eventType`, `assetlink_custody`.`audit_logs`.`actor`, `assetlink_custody`.`audit_logs`.`metadata`, `assetlink_custody`.`audit_logs`.`ipAddress`, `assetlink_custody`.`audit_logs`.`userAgent`, `assetlink_custody`.`audit_logs`.`timestamp` FROM `assetlink_custody`.`audit_logs` WHERE 1=1 ORDER BY `assetlink_custody`.`audit_logs`.`timestamp` DESC LIMIT ? OFFSET ?
+
+1. TOKEN_MINT_FAILED - 2026-01-13T08:51:21.870Z
+   Actor: system
+
+2. OPERATION_EXECUTED - 2026-01-13T08:51:15.510Z
+   Actor: system
+
+3. TOKEN_MINT_INITIATED - 2026-01-13T08:51:15.481Z
+   Actor: system
+
+4. OPERATION_APPROVED - 2026-01-13T08:50:43.400Z
+   Actor: ak_0f6bf9ab66a61cd598e709b65357856d
+
+5. OPERATION_CREATED - 2026-01-13T08:50:43.376Z
+   Actor: ak_c909d5a9253acd9e54ef917f66eedf99
+
+6. CUSTODY_APPROVED - 2026-01-13T08:50:43.349Z
+   Actor: ak_0f6bf9ab66a61cd598e709b65357856d
+
+7. ASSET_LINKED - 2026-01-13T08:50:40.003Z
+   Actor: ak_c909d5a9253acd9e54ef917f66eedf99
+
+8. TOKEN_MINT_FAILED - 2026-01-13T08:31:19.379Z
+   Actor: system
+
+9. OPERATION_EXECUTED - 2026-01-13T08:31:12.948Z
+   Actor: system
+
+10. TOKEN_MINT_INITIATED - 2026-01-13T08:31:12.928Z
+   Actor: system
+
+11. OPERATION_APPROVED - 2026-01-13T08:30:40.367Z
+   Actor: ak_0f6bf9ab66a61cd598e709b65357856d
+
+12. OPERATION_CREATED - 2026-01-13T08:30:40.293Z
+   Actor: ak_c909d5a9253acd9e54ef917f66eedf99
+
+13. CUSTODY_APPROVED - 2026-01-13T08:30:40.262Z
+   Actor: ak_0f6bf9ab66a61cd598e709b65357856d
+
+14. ASSET_LINKED - 2026-01-13T08:30:36.946Z
+   Actor: ak_c909d5a9253acd9e54ef917f66eedf99
+
+15. OPERATION_EXECUTED - 2026-01-13T08:29:02.647Z
+   Actor: system

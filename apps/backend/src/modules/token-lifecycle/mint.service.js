@@ -320,25 +320,63 @@ const ensureGasForVault = async (vaultId, blockchainId) => {
       });
     }
   } catch (error) {
-    logger.error('Error ensuring gas for vault', {
+    logger.error('CRITICAL: Error ensuring gas for vault', {
       vaultId,
       blockchainId: mapToFireblocksAsset(blockchainId),
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
-    // Don't throw error - continue with minting even if gas transfer fails
-    // The transaction will fail at Fireblocks level if there's truly insufficient gas
+    // Throw error to stop minting process if gas transfer failed
+    // This prevents "silent" failures where minting is attempted without gas
+    throw new Error(`Gas check failed: ${error.message}`);
   }
 };
 
 /**
  * Wait for transfer completion
  */
+/**
+ * Wait for transfer completion
+ * Polls transaction status until COMPLETED
+ */
 const waitForTransferCompletion = async (transferId) => {
-  // For now, we'll just wait a fixed time since the actual implementation
-  // would require checking transfer status which would add more API calls
-  // In a real implementation, you would check the transfer status
-  // with exponential backoff to reduce API calls
-  await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30 seconds
+  logger.info(`Polling gas transfer status for TX: ${transferId}`);
+
+  let attempts = 0;
+  const maxAttempts = 60; // 5 minutes max (5s interval)
+
+  while (attempts < maxAttempts) {
+    attempts++;
+
+    try {
+      // Import the client function directly since it's not exposed via the service wrapper yet
+      const { getTransactionById } = await import('../fireblocks/fireblocks.client.js');
+      const tx = await getTransactionById(transferId);
+
+      logger.info(`Gas transfer status: ${tx.status}`, { transferId, attempt: attempts });
+
+      if (tx.status === 'COMPLETED') {
+        logger.info('Gas transfer confirmed on-chain', { transferId });
+        return;
+      }
+
+      if (['FAILED', 'CANCELLED', 'REJECTED', 'BLOCKED'].includes(tx.status)) {
+        throw new Error(`Gas transfer failed with status: ${tx.status} - ${tx.subStatus || ''}`);
+      }
+
+    } catch (error) {
+      // If it's our thrown error, rethrow
+      if (error.message.includes('Gas transfer failed')) throw error;
+
+      // Otherwise log and continue polling (transient API error)
+      logger.warn('Error polling gas transfer status', { transferId, error: error.message });
+    }
+
+    // Wait standard 5 seconds
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+
+  throw new Error(`Gas transfer timed out after ${maxAttempts * 5} seconds`);
 };
 
 /**
@@ -349,7 +387,7 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
 
   let attempts = 0;
   const maxAttempts = 20; // Reduced attempts to reduce total API calls
-  const initialDelay = 120000; // 2 minutes (increased to reduce API calls)
+  const initialDelay = 5000; // 5 seconds (reduced for testing)
   const maxDelay = 600000; // 10 minutes maximum delay between polls
 
   // Track active monitoring to prevent duplicate monitors
@@ -439,18 +477,50 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
       }
 
       if (['FAILED', 'REJECTED', 'CANCELLED'].includes(currentStatus)) {
+        // Extract detailed error info
+        const failureReason = `Fireblocks Error: [${statusData.substatus || 'N/A'}] - ${statusData.errorMessage || 'Unknown Error'}`;
+
         logger.warn('Token mint failed', {
           tokenLinkId,
           status: currentStatus,
+          substatus: statusData.substatus,
+          errorMessage: statusData.errorMessage,
           custodyRecordId
         });
 
-        // Log failure
+        // Update custody record status to FAILED in database
+        // We need to find the related operation to update its failure reason
+        try {
+          // This is a simplified update - ideally we'd update the operation directly if we had its ID here
+          // But since we only have custodyRecordId, we'll update the custody record
+          await custodyService.updateCustodyStatus(
+            custodyRecordId,
+            CustodyStatus.FAILED,
+            {
+              failureReason: failureReason,
+              fireblocksError: statusData
+            },
+            'SYSTEM',
+            { source: 'FireblocksWebhook/Monitor' }
+          );
+
+          // Also try to update the latest operation for this custody record if possible
+          // But rely on audit log for details primarily
+        } catch (dbError) {
+          logger.error('Failed to update custody status to FAILED', { custodyRecordId, error: dbError.message });
+        }
+
+        // Log failure with FULL details
         await auditService.logEvent('TOKEN_MINT_FAILED', {
           tokenLinkId,
           status: currentStatus,
-          action: `Token mint failed with status: ${currentStatus}`
+          substatus: statusData.substatus,
+          errorMessage: statusData.errorMessage,
+          errorDetails: statusData.error,
+          fullResponse: statusData,
+          action: failureReason
         }, { custodyRecordId });
+
 
         // Remove from active monitors
         activeMintMonitors.delete(monitoringKey);

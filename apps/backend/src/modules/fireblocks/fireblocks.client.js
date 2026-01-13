@@ -553,15 +553,56 @@ export const getTokenizationStatus = async (tokenLinkId) => {
   }
 
   try {
-    // Use manual HTTPS request for getting tokenization status
-    const result = await makeFireblocksRequest(`/v1/tokenization/tokens/${tokenLinkId}`, 'GET', null);
-    return result;
+    // Use manual HTTPS request
+    const linkedToken = await makeFireblocksRequest(`/v1/tokenization/tokens/${tokenLinkId}`, 'GET', null);
+    logger.info('Tokenization status fetched', { tokenLinkId, status: linkedToken.status });
+
+    // If status is FAILED, log detailed error information
+    if (linkedToken.status === 'FAILED') {
+      logger.error('🚨 FIREBLOCKS TOKEN MINTING FAILED - DETAILED ERROR:', {
+        tokenLinkId,
+        status: linkedToken.status,
+        substatus: linkedToken.substatus,
+        errorMessage: linkedToken.errorMessage,
+        errorDetails: linkedToken.error,
+        blockchainId: linkedToken.blockchainId,
+        vaultAccountId: linkedToken.vaultAccountId,
+        contractAddress: linkedToken.tokenMetadata?.contractAddress,
+        txHash: linkedToken.txHash,
+        fullResponse: JSON.stringify(linkedToken, null, 2)
+      });
+
+      // Also console.log for immediate visibility in terminal
+      console.error('\n╔════════════════════════════════════════════════════════════╗');
+      console.error('║  🚨 FIREBLOCKS TOKEN MINTING FAILED - DETAILED ERROR 🚨   ║');
+      console.error('╠════════════════════════════════════════════════════════════╣');
+      console.error(`║  Token Link ID: ${tokenLinkId?.padEnd(42)} ║`);
+      console.error(`║  Status: ${linkedToken.status?.padEnd(49)} ║`);
+      console.error(`║  Substatus: ${(linkedToken.substatus || 'N/A')?.padEnd(46)} ║`);
+      console.error(`║  Error Message: ${(linkedToken.errorMessage || 'N/A')?.substring(0, 43).padEnd(43)} ║`);
+      console.error('╠════════════════════════════════════════════════════════════╣');
+      console.error('║  Full Response:                                            ║');
+      console.error('╚════════════════════════════════════════════════════════════╝');
+      console.error(JSON.stringify(linkedToken, null, 2));
+      console.error('═══════════════════════════════════════════════════════════════\n');
+    }
+
+    return {
+      status: linkedToken.status,
+      tokenId: linkedToken.id,
+      blockchainId: linkedToken.blockchainId,
+      txHash: linkedToken.txHash,
+      tokenMetadata: linkedToken.tokenMetadata,
+      substatus: linkedToken.substatus,
+      errorMessage: linkedToken.errorMessage
+    };
   } catch (error) {
     logger.error('Failed to get tokenization status', {
       tokenLinkId,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
-    throw new Error(`Failed to get tokenization status: ${error.message}`);
+    throw new Error(`Failed to retrieve tokenization status: ${error.message}`);
   }
 };
 
@@ -598,6 +639,34 @@ export const mintTokens = async (tokenId, vaultAccountId, amount) => {
   }
 };
 
+
+/**
+ * Get transaction details by ID
+ * Used for polling transfer status
+ */
+export const getTransactionById = async (txId) => {
+  if (!isConfigured()) {
+    logger.warn('SIMULATION: Returning mock transaction status');
+    return {
+      id: txId,
+      status: 'COMPLETED',
+      txHash: `0xmock_tx_${txId.slice(-8)}`
+    };
+  }
+
+  try {
+    // Use manual HTTPS request to avoid SDK issues
+    const tx = await makeFireblocksRequest(`/v1/transactions/${txId}`, 'GET', null);
+    return tx;
+  } catch (error) {
+    logger.error('Failed to get transaction details', {
+      txId,
+      error: error.message
+    });
+    throw new Error(`Failed to get transaction: ${error.message}`);
+  }
+};
+
 export default {
   isConfigured,
   createVault,
@@ -605,5 +674,6 @@ export default {
   getVaultDetails,
   issueToken,
   getTokenizationStatus,
-  mintTokens
+  mintTokens,
+  getTransactionById
 };

@@ -1,0 +1,64 @@
+≡ƒº¬ Starting Manual Issue Test using Vault 88...
+API Key configured: YES
+Config: {
+  name: 'TestToken935861',
+  symbol: 'TT935861',
+  decimals: 18,
+  totalSupply: '1000',
+  blockchainId: 'ETH_TEST5',
+  contractId: undefined
+}
+2026-01-13 15:05:35 [[32minfo[39m]: Fireblocks SDK initialized successfully {"service":"assetlink-custody"}
+2026-01-13 15:05:35 [[32minfo[39m]: Creating token on Fireblocks (Manual API)... {"service":"assetlink-custody","symbol":"TT935861","vaultId":"88","payload":{"blockchainId":"ETH_TEST5","assetId":"ETH_TEST5","vaultAccountId":"88","createParams":{"contractId":"d39ba6d0-f738-4fab-ae00-874213375b5c","deployFunctionParams":[{"name":"name","type":"string","value":"TestToken935861"},{"name":"symbol","type":"string","value":"TT935861"},{"name":"decimals","type":"uint8","value":"18"},{"name":"totalSupply","type":"uint256","value":"1000000000000000000000"}]},"displayName":"TestToken935861","useGasless":false,"feeLevel":"MEDIUM"}}
+
+≡ƒöÑ FIREBLOCKS RESPONSE:
+ΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöü
+{
+  "id": "898d34fe-b5e1-4420-bd8f-4e603df9db5f",
+  "displayName": "TestToken935861",
+  "status": "PENDING"
+}
+ΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöü
+
+2026-01-13 15:05:37 [[32minfo[39m]: Token issuance initiated {"service":"assetlink-custody","tokenLinkId":"898d34fe-b5e1-4420-bd8f-4e603df9db5f","symbol":"TT935861","vaultId":"88","status":"PENDING"}
+Γ£à Issue Request Submitted: {
+  tokenLinkId: '898d34fe-b5e1-4420-bd8f-4e603df9db5f',
+  status: 'PENDING'
+}
+ΓÅ│ Monitoring 898d34fe-b5e1-4420-bd8f-4e603df9db5f...
+2026-01-13 15:05:43 [[32minfo[39m]: Tokenization status fetched {"service":"assetlink-custody","tokenLinkId":"898d34fe-b5e1-4420-bd8f-4e603df9db5f","status":"PENDING"}
+[1] Status: PENDING / 
+2026-01-13 15:05:49 [[32minfo[39m]: Tokenization status fetched {"service":"assetlink-custody","tokenLinkId":"898d34fe-b5e1-4420-bd8f-4e603df9db5f","status":"PENDING"}
+[2] Status: PENDING / 
+2026-01-13 15:05:55 [[32minfo[39m]: Tokenization status fetched {"service":"assetlink-custody","tokenLinkId":"898d34fe-b5e1-4420-bd8f-4e603df9db5f","status":"PENDING"}
+[3] Status: PENDING / 
+2026-01-13 15:06:01 [[32minfo[39m]: Tokenization status fetched {"service":"assetlink-custody","tokenLinkId":"898d34fe-b5e1-4420-bd8f-4e603df9db5f","status":"PENDING"}
+[4] Status: PENDING / 
+2026-01-13 15:06:06 [[32minfo[39m]: Tokenization status fetched {"service":"assetlink-custody","tokenLinkId":"898d34fe-b5e1-4420-bd8f-4e603df9db5f","status":"PENDING"}
+[5] Status: PENDING / 
+2026-01-13 15:06:12 [[32minfo[39m]: Tokenization status fetched {"service":"assetlink-custody","tokenLinkId":"898d34fe-b5e1-4420-bd8f-4e603df9db5f","status":"PENDING"}
+[6] Status: PENDING / 
+2026-01-13 15:06:18 [[32minfo[39m]: Tokenization status fetched {"service":"assetlink-custody","tokenLinkId":"898d34fe-b5e1-4420-bd8f-4e603df9db5f","status":"PENDING"}
+[7] Status: PENDING / 
+2026-01-13 15:06:24 [[32minfo[39m]: Tokenization status fetched {"service":"assetlink-custody","tokenLinkId":"898d34fe-b5e1-4420-bd8f-4e603df9db5f","status":"PENDING"}
+[8] Status: PENDING / 
+2026-01-13 15:06:30 [[32minfo[39m]: Tokenization status fetched {"service":"assetlink-custody","tokenLinkId":"898d34fe-b5e1-4420-bd8f-4e603df9db5f","status":"COMPLETED"}
+[9] Status: COMPLETED / 
+Γ£à SUCCESS!
+Details: {
+  "status": "COMPLETED",
+  "tokenId": "898d34fe-b5e1-4420-bd8f-4e603df9db5f",
+  "tokenMetadata": {
+    "assetId": "TT935861_ETH_TEST5_8N09",
+    "name": "TestToken935861",
+    "symbol": "TT935861",
+    "testnet": true,
+    "networkProtocol": "ETH",
+    "contractAddress": "0x8836CAf18400ecbaF9c7928169219Ac78963b332",
+    "blockchain": "ETH_TEST5",
+    "decimals": 18,
+    "type": "ERC20",
+    "totalSupply": "1e+21",
+    "vaultAccountId": "88"
+  }
+}
