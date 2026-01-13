@@ -16,7 +16,8 @@ POST /v1/marketplace/listings
   "assetId": "ROLEX-2025-001",
   "price": "50000.00",
   "currency": "USD",
-  "expiryDate": "2024-12-31T23:59:59Z"
+  "expiryDate": "2024-12-31T23:59:59Z",
+  "quantity": "10" // Optional, defaults to '1'
 }
 ```
 
@@ -124,7 +125,8 @@ POST /v1/marketplace/listings/:listingId/bids
 **Request Body:**
 ```json
 {
-  "amount": "48000.00"
+  "amount": "48000.00",
+  "quantity": "1" // Optional, defaults to '1'
 }
 ```
 
@@ -139,6 +141,39 @@ POST /v1/marketplace/listings/:listingId/bids
     "amount": "48000.00",
     "status": "PENDING",
     "createdAt": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+---
+
+### Direct Purchase
+```
+POST /v1/marketplace/listings/:listingId/purchase
+```
+
+**Request Body:**
+```json
+{
+  "quantity": "1", // Optional, defaults to '1'
+  "sourceVaultId": "vault_id", // Optional, for Fireblocks payment
+  "paymentAssetId": "ETH_TEST5" // Optional, defaults to 'ETH_TEST5'
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "bid": {
+      "id": "uuid",
+      "status": "ACCEPTED"
+    },
+    "listing": {
+      "id": "uuid",
+      "status": "ACTIVE" // or "SOLD" if fully sold out
+    }
   }
 }
 ```

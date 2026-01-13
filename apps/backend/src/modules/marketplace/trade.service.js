@@ -263,11 +263,14 @@ export const acceptBid = async (bidId, sellerId, context = {}) => {
     const newQuantitySold = parseFloat(listing.quantitySold) + bidQuantity;
     const totalListed = parseFloat(listing.quantityListed);
 
+    // Use Math.abs to handle potential floating point precision issues
+    const isFullySold = Math.abs(newQuantitySold - totalListed) < 0.000001 || newQuantitySold >= totalListed;
+
     const updatedListing = await tx.listing.update({
       where: { id: listing.id },
       data: {
         quantitySold: newQuantitySold.toString(),
-        status: newQuantitySold >= totalListed ? ListingStatus.SOLD : ListingStatus.ACTIVE,
+        status: isFullySold ? ListingStatus.SOLD : ListingStatus.ACTIVE,
         updatedAt: new Date()
       }
     });
@@ -389,7 +392,9 @@ export const executePurchase = async (listingId, buyerId, paymentData = {}, cont
   }
 
   // 3. Create a phantom 'ACCEPTED' bid to reuse trade logic
-  const totalAmount = parseFloat(listing.price) * parseFloat(listing.quantityListed);
+  // Get quantity from paymentData or default to full listing quantity
+  const purchaseQuantity = parseFloat(paymentData.quantity || listing.quantityListed);
+  const totalAmount = parseFloat(listing.price) * purchaseQuantity;
 
   // Check balance (Off-chain balance for ledger)
   let buyerBalance = await prisma.userBalance.findUnique({
@@ -440,6 +445,12 @@ export const executePurchase = async (listingId, buyerId, paymentData = {}, cont
     throw BadRequestError('Insufficient off-chain balance for direct purchase');
   }
 
+  // Validate that the requested quantity is available
+  const availableQuantity = parseFloat(listing.quantityListed) - parseFloat(listing.quantitySold);
+  if (purchaseQuantity > availableQuantity) {
+    throw BadRequestError(`Insufficient quantity available. Requested: ${purchaseQuantity}, Available: ${availableQuantity}`);
+  }
+
   // Create the bid
   const bid = await prisma.bid.create({
     data: {
@@ -447,7 +458,7 @@ export const executePurchase = async (listingId, buyerId, paymentData = {}, cont
       tenantId: listing.tenantId,
       buyerId,
       amount: listing.price,
-      quantity: listing.quantityListed,
+      quantity: purchaseQuantity.toString(),
       status: BidStatus.PENDING
     }
   });
