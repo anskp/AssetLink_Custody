@@ -20,7 +20,7 @@ storage/assets/
 
 # Editor directories and files
 .vscode/*
-!.vscode/extensions.json
+!.vscode/extensions.jsonS
 .idea
 .DS_Store
 *.suo

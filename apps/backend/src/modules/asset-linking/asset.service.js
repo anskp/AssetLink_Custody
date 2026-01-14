@@ -177,6 +177,7 @@ export const getAssetLedger = async (assetId) => {
         priceUsd: o.purchasePriceUsd || o.purchasePrice,
         priceEth: o.purchasePriceEth,
         currency: o.currency,
+        walletAddress: o.walletAddress || null,
         acquiredAt: o.acquiredAt
     }));
 };

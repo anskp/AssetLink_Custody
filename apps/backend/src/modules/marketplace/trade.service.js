@@ -199,6 +199,7 @@ export const acceptBid = async (bidId, sellerId, context = {}) => {
       }
     });
 
+
     if (buyerOwnership) {
       // Update existing ownership
       await tx.ownership.update({
@@ -209,7 +210,8 @@ export const acceptBid = async (bidId, sellerId, context = {}) => {
           }
         },
         data: {
-          quantity: (parseFloat(buyerOwnership.quantity) + bidQuantity).toString()
+          quantity: (parseFloat(buyerOwnership.quantity) + bidQuantity).toString(),
+          walletAddress: context.walletAddress || undefined // Update wallet address if provided
         }
       });
     } else {
@@ -224,7 +226,8 @@ export const acceptBid = async (bidId, sellerId, context = {}) => {
           purchasePrice: bid.amount,
           purchasePriceUsd: listing.priceUsd || bid.amount,
           purchasePriceEth: listing.priceEth,
-          currency: listing.currency
+          currency: listing.currency,
+          walletAddress: context.walletAddress || null // Store wallet address
         }
       });
     }
@@ -356,7 +359,7 @@ export const executePurchase = async (listingId, buyerId, paymentData = {}, cont
   }
 
   // 2. Handle Fireblocks Payment if source vault is provided
-  const { sourceVaultId, paymentAssetId = 'ETH_TEST5' } = paymentData;
+  const { sourceVaultId, paymentAssetId = 'ETH_TEST5', walletAddress } = paymentData;
   let fireblocksTxId = null;
 
   if (sourceVaultId) {
@@ -389,12 +392,15 @@ export const executePurchase = async (listingId, buyerId, paymentData = {}, cont
   }
 
   // 3. Create a phantom 'ACCEPTED' bid to reuse trade logic
+
   const totalAmount = parseFloat(listing.price) * parseFloat(listing.quantityListed);
 
   // Check balance (Off-chain balance for ledger)
   let buyerBalance = await prisma.userBalance.findUnique({
     where: { userId: buyerId }
   });
+
+
 
   // If Fireblocks payment was successful, credit the off-chain balance temporarily
   // This "bridges" the on-chain deposit to the off-chain ledger so acceptBid can succeed
@@ -455,7 +461,8 @@ export const executePurchase = async (listingId, buyerId, paymentData = {}, cont
   // Accept the bid (ledger update)
   const result = await acceptBid(bid.id, listing.sellerId, {
     ...context,
-    fireblocksTxId // Pass to audit log
+    fireblocksTxId, // Pass to audit log
+    walletAddress   // Pass wallet address for ledger
   });
 
   return {

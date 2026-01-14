@@ -316,6 +316,7 @@ model Ownership {
   purchasePriceUsd  String?  // New USD purchase price
   purchasePriceEth  String?  // New ETH purchase price
   currency          String   @default("USD")
+  walletAddress     String?  // Investor's wallet address for off-chain tracking
   
   acquiredAt        DateTime @default(now())
   createdAt         DateTime @default(now())
