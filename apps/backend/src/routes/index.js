@@ -8,6 +8,7 @@ import vaultRoutes from './vault.routes.js';
 import marketplaceRoutes from './marketplace.routes.js';
 import adminRoutes from './admin.routes.js';
 import docsRoutes from './docs.routes.js';
+import explorerRoutes from '../modules/explorer/explorer.routes.js';
 import { authenticate } from '../modules/auth/auth.middleware.js';
 
 /**
@@ -68,6 +69,9 @@ router.use('/audit', authenticate, auditRoutes);
 
 // Mount marketplace routes (authentication handled per-route)
 router.use('/marketplace', marketplaceRoutes);
+
+// Mount public explorer routes
+router.use('/explorer', explorerRoutes);
 
 // Mount other route modules (placeholder for future sprints)
 // router.use('/ledger', authenticate, ledgerRoutes);

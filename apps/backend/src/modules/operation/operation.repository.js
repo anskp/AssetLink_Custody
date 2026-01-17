@@ -18,7 +18,8 @@ export const createOperation = async (data) => {
             vaultWalletId: data.vaultWalletId,
             payload: data.payload || {},
             initiatedBy: data.initiatedBy,
-            idempotencyKey: data.idempotencyKey
+            idempotencyKey: data.idempotencyKey,
+            offchainTxHash: data.offchainTxHash
         },
         include: {
             custodyRecord: true,
@@ -79,7 +80,7 @@ export const listOperations = async (filters = {}) => {
     if (status) where.status = status;
     if (operationType) where.operationType = operationType;
     if (custodyRecordId) where.custodyRecordId = custodyRecordId;
-    
+
     // Filter by tenantId through custodyRecord relation
     if (tenantId) {
         where.custodyRecord = {

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import * as operationRepository from './operation.repository.js';
 import * as custodyRepository from '../custody/custody.repository.js';
 import * as auditService from '../audit/audit.service.js';
@@ -34,13 +35,20 @@ export const initiateOperation = async (data, actor, context = {}) => {
         throw BadRequestError(`Custody record ${custodyRecordId} already has pending operations`);
     }
 
+    // Generate offchainTxHash (altx_<sha256_hash>)
+    const salt = crypto.randomBytes(16).toString('hex');
+    const offchainTxHash = 'altx_0x' + crypto.createHash('sha256')
+        .update(`${custodyRecordId}${operationType}${Date.now()}${salt}`)
+        .digest('hex');
+
     // Create operation in PENDING_CHECKER state
     const operation = await operationRepository.createOperation({
         operationType,
         custodyRecordId,
         payload,
         initiatedBy: actor,
-        status: OperationStatus.PENDING_CHECKER
+        status: OperationStatus.PENDING_CHECKER,
+        offchainTxHash
     });
 
     // Log audit event
@@ -96,6 +104,12 @@ export const initiateMintOperation = async (data, actor, context = {}) => {
         throw BadRequestError(`Asset ${assetId} already has pending operations`);
     }
 
+    // Generate offchainTxHash (altx_<sha256_hash>)
+    const salt = crypto.randomBytes(16).toString('hex');
+    const offchainTxHash = 'altx_0x' + crypto.createHash('sha256')
+        .update(`${custodyRecord.id}${OperationType.MINT}${Date.now()}${salt}`)
+        .digest('hex');
+
     // Create operation in PENDING_CHECKER state
     const operation = await operationRepository.createOperation({
         operationType: OperationType.MINT,
@@ -110,7 +124,8 @@ export const initiateMintOperation = async (data, actor, context = {}) => {
             blockchainId
         },
         initiatedBy: actor,
-        status: OperationStatus.PENDING_CHECKER
+        status: OperationStatus.PENDING_CHECKER,
+        offchainTxHash
     });
 
     // Log audit event

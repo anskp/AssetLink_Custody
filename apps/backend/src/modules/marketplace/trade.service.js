@@ -4,11 +4,14 @@
  */
 
 import prisma from '../../config/db.js';
+import crypto from 'crypto';
 import * as auditService from '../audit/audit.service.js';
 import * as fireblocksService from '../vault/fireblocks.service.js';
+import * as operationRepository from '../operation/operation.repository.js';
 import { BadRequestError, NotFoundError, ForbiddenError } from '../../errors/ApiError.js';
 import logger from '../../utils/logger.js';
 import { ListingStatus } from './listing.service.js';
+import { OperationStatus } from '../../enums/operationStatus.js';
 
 /**
  * Bid Status Enum
@@ -95,11 +98,19 @@ export const placeBid = async (listingId, data, tenantId, buyerId, context = {})
  * Accept a bid (executes off-chain ownership transfer and payment settlement)
  */
 export const acceptBid = async (bidId, tenantId, sellerId, context = {}) => {
-  // Get bid with listing
+  // Get bid with listing and custody record
   const bid = await prisma.bid.findUnique({
     where: { id: bidId },
     include: {
-      listing: true
+      listing: {
+        include: {
+          custodyRecord: {
+            include: {
+              vaultWallet: true
+            }
+          }
+        }
+      }
     }
   });
 
@@ -330,6 +341,32 @@ export const acceptBid = async (bidId, tenantId, sellerId, context = {}) => {
     ...context
   });
 
+  // Create custody operation for explorer tracking
+  const salt = crypto.randomBytes(16).toString('hex');
+  const offchainTxHash = 'altx_0x' + crypto.createHash('sha256')
+    .update(`${listing.custodyRecordId}TRANSFER${Date.now()}${salt}`)
+    .digest('hex');
+
+  await operationRepository.createOperation({
+    operationType: 'TRANSFER',
+    custodyRecordId: listing.custodyRecordId,
+    status: OperationStatus.EXECUTED,
+    payload: {
+      fromVaultId: context.sourceVaultId || bid.buyerId,
+      toVaultId: listing.custodyRecord?.vaultWallet?.fireblocksId,
+      amount: totalAmount.toString(),
+      quantity: bidQuantity.toString(),
+      assetId: listing.assetId,
+      listingId: listing.id,
+      bidId
+    },
+    initiatedBy: bid.buyerId,
+    approvedBy: sellerId,
+    executedAt: new Date(),
+    offchainTxHash,
+    txHash: context.fireblocksTxId
+  });
+
   return result;
 };
 
@@ -491,6 +528,7 @@ export const executePurchase = async (listingId, buyerId, paymentData = {}, cont
   console.log('🤝 Accepting bid...', { bidId: bid.id, tenantId: listing.tenantId, sellerId: listing.sellerId });
   const result = await acceptBid(bid.id, listing.tenantId, listing.sellerId, {
     ...context,
+    sourceVaultId,  // ✅ PASS TO acceptBid FOR TRANSFER TRACKING
     fireblocksTxId, // Pass to audit log
     walletAddress   // Pass wallet address for ledger
   });

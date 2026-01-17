@@ -101,12 +101,15 @@ model CustodyRecord {
   auditLogs         AuditLog[]
   assetMetadata     AssetMetadata?
   listings          Listing[]
+  ownerships        Ownership[]
+
+  // Explorer identifiers
+  publicContractAddress String?  @unique // alca_<chain>_<short-hash>
 
   @@index([assetId])
   @@index([tenantId])
   @@index([createdBy])
   @@index([status])
-  @@index([tokenAddress, tokenId])
   @@map("custody_records")
 }
 
@@ -202,6 +205,9 @@ model CustodyOperation {
   // Idempotency
   idempotencyKey      String?  @unique
   
+  // Explorer identifier
+  offchainTxHash      String?  @unique // altx_<sha256_hash>
+
   // Timestamps
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -212,6 +218,7 @@ model CustodyOperation {
   @@index([status])
   @@index([operationType])
   @@index([fireblocksTaskId])
+  @@index([offchainTxHash])
   @@map("custody_operations")
 }
 
@@ -306,6 +313,7 @@ model Ownership {
   id                String   @id @default(uuid())
   assetId           String
   custodyRecordId   String
+  custodyRecord     CustodyRecord @relation(fields: [custodyRecordId], references: [id])
   
   // Two-level isolation
   tenantId          String   // Platform owner

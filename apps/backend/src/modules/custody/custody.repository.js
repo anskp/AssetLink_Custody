@@ -13,13 +13,14 @@ import { CustodyStatus } from '../../enums/custodyStatus.js';
  * @param {string} createdBy - End user who created the asset
  * @param {string} status - Initial status
  */
-export const createCustodyRecord = async (assetId, tenantId, createdBy, status = CustodyStatus.LINKED) => {
+export const createCustodyRecord = async (assetId, tenantId, createdBy, status = CustodyStatus.LINKED, publicContractAddress = null) => {
     return await prisma.custodyRecord.create({
         data: {
             assetId: String(assetId),
             tenantId,
             createdBy,
             status,
+            publicContractAddress,
             linkedAt: status === CustodyStatus.LINKED ? new Date() : null
         }
     });

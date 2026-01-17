@@ -16,19 +16,25 @@ import AdminUsers from '../pages/admin/Users';
 import AdminApiKeys from '../pages/admin/ApiKeys';
 import AdminAssets from '../pages/admin/Assets';
 import AdminAuditLogs from '../pages/admin/AuditLogs';
+import ExplorerHome from '../pages/explorer/ExplorerHome';
+import AssetDetail from '../pages/explorer/AssetDetail';
+import TransactionDetail from '../pages/explorer/TransactionDetail';
+import AddressDetail from '../pages/explorer/AddressDetail';
+import ExplorerTokens from '../pages/explorer/Tokens';
+import ExplorerTransactions from '../pages/explorer/Transactions';
 import useAuthStore from '../store/auth.store';
 
 const ProtectedRoute = ({ children, requireAdmin = false }) => {
     const { isAuthenticated, user } = useAuthStore();
-    
+
     if (!isAuthenticated) {
         return <Navigate to={requireAdmin ? "/admin/login" : "/login"} />;
     }
-    
+
     if (requireAdmin && user?.role !== 'ADMIN') {
         return <Navigate to="/login" />;
     }
-    
+
     return children;
 };
 
@@ -40,7 +46,15 @@ const AppRouter = () => {
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/docs" element={<Docs />} />
-                
+
+                {/* Explorer Routes (Public) */}
+                <Route path="/explorer" element={<ExplorerHome />} />
+                <Route path="/explorer/tokens" element={<ExplorerTokens />} />
+                <Route path="/explorer/transactions" element={<ExplorerTransactions />} />
+                <Route path="/explorer/asset/:address" element={<AssetDetail />} />
+                <Route path="/explorer/tx/:hash" element={<TransactionDetail />} />
+                <Route path="/explorer/address/:address" element={<AddressDetail />} />
+
                 {/* Client Routes */}
                 <Route
                     path="/dashboard"
@@ -106,7 +120,7 @@ const AppRouter = () => {
                         </ProtectedRoute>
                     }
                 />
-                
+
                 {/* Admin Routes */}
                 <Route path="/admin/login" element={<AdminLogin />} />
                 <Route
@@ -149,7 +163,7 @@ const AppRouter = () => {
                         </ProtectedRoute>
                     }
                 />
-                
+
                 {/* Default Route */}
                 <Route path="/" element={<Navigate to="/login" />} />
             </Routes>

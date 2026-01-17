@@ -16,12 +16,18 @@ export const linkAsset = async (assetId, tenantId, createdBy, actor, context = {
         throw ConflictError(`Asset ${assetId} is already in custody`);
     }
 
+    // Generate publicContractAddress (alca_<chain>_<short-hash>)
+    const chainCode = (metadata.blockchain || 'eth').toLowerCase();
+    const shortHash = Math.random().toString(36).substring(2, 10);
+    const publicContractAddress = `alca_${chainCode}_${shortHash}`;
+
     // Create custody record with two-level isolation (PENDING status - awaiting approval)
     const custodyRecord = await custodyRepository.createCustodyRecord(
         assetId,
         tenantId,
         createdBy,
-        CustodyStatus.PENDING
+        CustodyStatus.PENDING,
+        publicContractAddress
     );
 
     // Save metadata if provided
