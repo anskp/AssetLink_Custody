@@ -166,6 +166,12 @@ export const approveOperation = async (operationId, actor, context = {}, skipMak
         throw ForbiddenError('Maker cannot approve their own operation');
     }
 
+    // Check if operation is already approved - if so, just execute it
+    if (operation.status === OperationStatus.APPROVED) {
+        logger.info('Operation already approved, executing directly', { operationId });
+        return await executeOperation(operationId, actor, context);
+    }
+
     // Check state transition
     if (!canTransitionTo(operation.status, OperationStatus.APPROVED)) {
         throw BadRequestError(`Cannot approve operation in status ${operation.status}`);
