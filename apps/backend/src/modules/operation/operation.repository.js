@@ -50,6 +50,7 @@ export const updateStatus = async (id, status, updates = {}) => {
         rejectedBy,
         rejectionReason,
         fireblocksTaskId,
+        fireblocksStatus,
         txHash,
         executedAt,
         failureReason
@@ -63,6 +64,7 @@ export const updateStatus = async (id, status, updates = {}) => {
             rejectedBy,
             rejectionReason,
             fireblocksTaskId,
+            fireblocksStatus,
             txHash,
             executedAt,
             failureReason

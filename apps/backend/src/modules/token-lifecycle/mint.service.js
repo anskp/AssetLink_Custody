@@ -169,6 +169,7 @@ export const mintToken = async (mintData, actor, context = {}) => {
     // Note: We don't await this to avoid blocking the response,
     // but we'll remove the operation key from active monitors after a delay
     try {
+      // Pass the operationId through context to the monitor
       monitorMintingStatus(result.tokenLinkId, custodyRecord.id, totalSupply.toString(), actor, context);
     } catch (monitoringError) {
       logger.error('Failed to start mint monitoring', {
@@ -423,6 +424,19 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
         status: currentStatus,
         attempts
       });
+
+      // Update the operation record with the granular Fireblocks status
+      if (context.operationId) {
+        try {
+          const operationRepository = (await import('../operation/operation.repository.js')).default;
+          await operationRepository.updateStatus(context.operationId, 'EXECUTING', {
+            fireblocksStatus: currentStatus
+          });
+          logger.info('Updated operation fireblocksStatus', { operationId: context.operationId, fireblocksStatus: currentStatus });
+        } catch (dbError) {
+          logger.warn('Failed to update operation fireblocksStatus', { operationId: context.operationId, error: dbError.message });
+        }
+      }
 
       // Log granular progress for the live terminal
       if (attempts === 2) {

@@ -142,51 +142,17 @@ export const approveCustodyLink = async (id, tenantId, actor, context = {}) => {
     const vaultResult = await fireblocksService.createUserVault(vaultName, id);
     const fireblocksVaultId = vaultResult.vaultId;
 
-    logger.info('Fireblocks vault created, getting wallet address', {
+    logger.info('Empty Fireblocks vault created for custody', {
         vaultId: fireblocksVaultId,
-        blockchain: 'ETH_TEST5'
+        custodyRecordId: id
     });
 
-    // Get wallet address for ETH_TEST5 (this also creates the asset in the vault)
-    const walletAddress = await fireblocksService.getWalletAddress(fireblocksVaultId, 'ETH_TEST5');
-
-    logger.info('Wallet address obtained', {
-        vaultId: fireblocksVaultId,
-        walletAddress,
-        blockchain: 'ETH_TEST5'
-    });
-
-    // Transfer initial gas from vault 88 to the new vault
-    logger.info('Transferring initial gas to new vault', {
-        fromVault: '88',
-        toVault: fireblocksVaultId,
-        amount: '0.002',
-        blockchain: 'ETH_TEST5'
-    });
-
-    try {
-        const vaultFireblocksService = await import('../vault/fireblocks.service.js');
-        await vaultFireblocksService.transferTokens(
-            '88',              // Gas vault
-            fireblocksVaultId, // New vault
-            'ETH_TEST5',       // Asset
-            0.002              // Amount (enough for several transactions)
-        );
-        logger.info('Initial gas transfer completed', { vaultId: fireblocksVaultId });
-    } catch (gasError) {
-        logger.warn('Failed to transfer initial gas, vault may not have enough gas for minting', {
-            vaultId: fireblocksVaultId,
-            error: gasError.message
-        });
-        // Don't fail the approval, just warn
-    }
-
-    // Create a VaultWallet record in the database to track this vault with address
+    // Create a VaultWallet record to track this empty vault
     const vaultWalletRecord = await prisma.vaultWallet.create({
         data: {
             fireblocksId: fireblocksVaultId,
-            blockchain: 'ETH_TEST5', // Default blockchain
-            address: walletAddress, // Store the wallet address
+            blockchain: null, // No blockchain asset yet
+            address: null, // No wallet address yet (created during minting)
             vaultType: 'CUSTODY',
             isActive: true
         }
@@ -206,21 +172,19 @@ export const approveCustodyLink = async (id, tenantId, actor, context = {}) => {
     // Log audit event
     await auditService.logEvent('CUSTODY_APPROVED', {
         assetId: custodyRecord.assetId,
-        vaultId: fireblocksVaultId,
-        walletAddress: walletAddress
+        vaultId: fireblocksVaultId
     }, {
         custodyRecordId: id,
         actor,
         ...context
     });
 
-    logger.info('Custody link approved with Fireblocks vault', {
+    logger.info('Custody link approved with empty Fireblocks vault', {
         custodyRecordId: id,
         assetId: custodyRecord.assetId,
         tenantId,
         actor,
-        vaultId: fireblocksVaultId,
-        walletAddress
+        vaultId: fireblocksVaultId
     });
 
     return enrichCustodyRecord(updated);

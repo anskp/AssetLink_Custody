@@ -167,34 +167,64 @@ export const getWalletAddress = async (vaultId, assetId = 'ETH_TEST5') => {
     const fireblocks = getFireblocksClient();
     if (!fireblocks) throw new Error('Fireblocks SDK not initialized');
 
-    try {
-        // Try to get existing address
-        const addressesResponse = await fireblocksRequest(`/v1/vault/accounts/${vaultId}/assets/${assetId}/addresses`, 'GET', null);
+    // Helper to get address
+    const getAddress = async () => {
+        try {
+            const addressesResponse = await fireblocksRequest(`/v1/vault/accounts/${vaultId}/${assetId}/addresses`, 'GET', null);
+            if (addressesResponse.data.addresses?.length > 0) {
+                return addressesResponse.data.addresses[0].address;
+            }
+        } catch (e) {
+            // Ignore error appropriately
+        }
+        return null;
+    };
 
-        if (addressesResponse.data.addresses?.length > 0) {
-            return addressesResponse.data.addresses[0].address;
+    // 1. Try to get existing address
+    let address = await getAddress();
+    if (address) return address;
+
+    // 2. Create asset in vault
+    logger.info('Asset not found in vault, creating...', { vaultId, assetId });
+    try {
+        await fireblocksRequest(`/v1/vault/accounts/${vaultId}/${assetId}`, 'POST', {});
+    } catch (e) {
+        // Asset might already exist or creation failed (will catch downstream if vital)
+        logger.warn('Asset creation attempt finished', { error: e.message });
+    }
+
+    // 3. Try to get address again (Auto-generated for ETH/Account-based)
+    address = await getAddress();
+    if (address) {
+        logger.info('Wallet address retrieved after creation', { vaultId, assetId, address });
+        return address;
+    }
+
+    // 4. Explicitly create address (For BTC/UTXO or if not auto-generated)
+    try {
+        logger.info('Explicitly creating address...', { vaultId, assetId });
+        const addrResponse = await fireblocksRequest(`/v1/vault/accounts/${vaultId}/${assetId}/addresses`, 'POST', {
+            description: 'Primary address'
+        });
+
+        // Return directly if response contains address
+        if (addrResponse.data.address || addrResponse.data.legacyAddress) {
+            address = addrResponse.data.address || addrResponse.data.legacyAddress;
+        } else {
+            address = await getAddress();
         }
     } catch (e) {
-        // Address doesn't exist, proceed to create asset
-        logger.info('Asset not found in vault, creating...', { vaultId, assetId });
+        logger.warn('Address creation step failed (might be unsupported for this asset)', { error: e.message });
+        // Final attempt to get address
+        address = await getAddress();
     }
 
-    // Create asset in vault
-    try {
-        await fireblocksRequest(`/v1/vault/accounts/${vaultId}/assets`, 'POST', { assetId });
-    } catch (e) {
-        // Asset might already exist
+    if (address) {
+        logger.info('Wallet address generated/retrieved', { vaultId, assetId, address });
+        return address;
     }
 
-    // Create deposit address
-    const addrResponse = await fireblocksRequest(`/v1/vault/accounts/${vaultId}/assets/${assetId}/addresses`, 'POST', {
-        description: 'Primary address'
-    });
-
-    const address = addrResponse.data.address || addrResponse.data.legacyAddress;
-    logger.info('Wallet address generated', { vaultId, assetId, address });
-
-    return address;
+    throw new Error(`Could not generate or retrieve address for ${assetId} in vault ${vaultId}`);
 };
 
 /**

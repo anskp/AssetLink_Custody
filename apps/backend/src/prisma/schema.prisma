@@ -53,7 +53,7 @@ model User {
 model VaultWallet {
   id              String   @id @default(uuid())
   fireblocksId    String   // Fireblocks vault ID (not unique - one vault has multiple wallets)
-  blockchain      String   // ETH, MATIC, etc.
+  blockchain      String?  // ETH, MATIC, etc. (null for empty vaults)
   address         String?  // Wallet address for this blockchain
   vaultType       String   // CUSTODY, SETTLEMENT
   isActive        Boolean  @default(true)
@@ -198,6 +198,7 @@ model CustodyOperation {
   
   // Execution tracking
   fireblocksTaskId    String?  @unique
+  fireblocksStatus    String?  // status from Fireblocks (SUBMITTED, BROADCASTING, etc.)
   txHash              String?
   executedAt          DateTime?
   failureReason       String?  @db.Text
