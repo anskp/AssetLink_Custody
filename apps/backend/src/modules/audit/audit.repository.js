@@ -142,6 +142,50 @@ export const getRecentLogs = async (limit = 50) => {
 };
 
 /**
+ * Get audit logs with flexible filtering
+ */
+export const getAuditLogs = async (filters = {}) => {
+    const {
+        assetId,
+        custodyRecordId,
+        operationId,
+        eventType,
+        limit = 100,
+        offset = 0
+    } = filters;
+
+    const where = {};
+
+    if (assetId) {
+        where.custodyRecord = { assetId: String(assetId) };
+    }
+    if (custodyRecordId) {
+        where.custodyRecordId = custodyRecordId;
+    }
+    if (operationId) {
+        where.operationId = operationId;
+    }
+    if (eventType) {
+        where.eventType = eventType;
+    }
+
+    const [logs, total] = await Promise.all([
+        prisma.auditLog.findMany({
+            where,
+            orderBy: { timestamp: 'desc' },
+            take: limit,
+            skip: offset,
+            include: {
+                operation: true
+            }
+        }),
+        prisma.auditLog.count({ where })
+    ]);
+
+    return { logs, total };
+};
+
+/**
  * Verify audit log immutability
  * This function checks that no update or delete operations exist
  * Returns true if the repository maintains immutability guarantees
@@ -159,12 +203,12 @@ export const verifyImmutability = () => {
         'getRecentLogs',
         'verifyImmutability'
     ];
-    
+
     logger.info('Audit log immutability verification', {
         isImmutable: true,
         note: 'Repository structure enforces immutability - no update/delete operations exist'
     });
-    
+
     return true;
 };
 
@@ -176,5 +220,6 @@ export default {
     findByEventType,
     findByDateRange,
     getRecentLogs,
+    getAuditLogs,
     verifyImmutability
 };

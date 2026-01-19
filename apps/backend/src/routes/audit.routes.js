@@ -73,4 +73,27 @@ router.get('/events/:eventType', async (req, res, next) => {
     }
 });
 
+/**
+ * Get audit logs with flexible filtering
+ * GET /v1/audit/logs
+ */
+router.get('/logs', requirePermission('read'), async (req, res, next) => {
+    try {
+        const { assetId, custodyRecordId, operationId, eventType, limit, offset } = req.query;
+
+        const result = await auditRepository.getAuditLogs({
+            assetId,
+            custodyRecordId,
+            operationId,
+            eventType,
+            limit: limit ? parseInt(limit) : undefined,
+            offset: offset ? parseInt(offset) : undefined
+        });
+
+        res.json(result);
+    } catch (error) {
+        next(error);
+    }
+});
+
 export default router;

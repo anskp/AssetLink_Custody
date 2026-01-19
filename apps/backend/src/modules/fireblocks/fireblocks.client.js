@@ -405,8 +405,27 @@ export const issueToken = async (vaultId, tokenConfig) => {
 
     logger.info('Creating token on Fireblocks (Manual API)...', { symbol, vaultId, payload });
 
-    // Use manual HTTPS request like in the copym-mono project
-    const result = await makeFireblocksRequest('/v1/tokenization/tokens', 'POST', payload);
+    // Log the full request for debugging
+    console.log('\n📤 FIREBLOCKS TOKENIZATION REQUEST:');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('Endpoint: POST /v1/tokenization/tokens');
+    console.log('Vault ID:', vaultId);
+    console.log('Payload:', JSON.stringify(payload, null, 2));
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    let result;
+    try {
+      // Use manual HTTPS request like in the copym-mono project
+      result = await makeFireblocksRequest('/v1/tokenization/tokens', 'POST', payload);
+    } catch (apiError) {
+      // Log the raw error from Fireblocks
+      console.error('\n❌ FIREBLOCKS API ERROR:');
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('Error Message:', apiError.message);
+      console.error('Error Stack:', apiError.stack);
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      throw apiError;
+    }
 
     // Log actual Fireblocks response to console for external API users
     console.log('\n🔥 FIREBLOCKS RESPONSE:');
@@ -499,18 +518,49 @@ const makeFireblocksRequest = async (path, method, payload) => {
         try {
           const parsedData = JSON.parse(responseData);
           if (res.statusCode >= 400) {
+            // Log detailed error information
+            logger.error('Fireblocks API returned error status', {
+              statusCode: res.statusCode,
+              path,
+              method,
+              response: parsedData
+            });
+
+            console.error('\n❌ FIREBLOCKS HTTP ERROR:');
+            console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.error(`Status Code: ${res.statusCode}`);
+            console.error(`Path: ${path}`);
+            console.error(`Response:`, JSON.stringify(parsedData, null, 2));
+            console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
             reject(new Error(parsedData.message || `Fireblocks API Error: ${res.statusCode}`));
           } else {
             resolve(parsedData);
           }
         } catch (e) {
-          resolve(responseData);
+          // If response is not JSON, log it as-is
+          logger.error('Failed to parse Fireblocks response', {
+            statusCode: res.statusCode,
+            path,
+            responseData
+          });
+
+          if (res.statusCode >= 400) {
+            reject(new Error(`Fireblocks API Error: ${res.statusCode} - ${responseData}`));
+          } else {
+            resolve(responseData);
+          }
         }
       });
     });
 
     req.on('error', (error) => {
-      logger.error('HTTPS Request Error', { error: error.message });
+      logger.error('HTTPS Request Error', { path, error: error.message });
+      console.error('\n❌ HTTPS REQUEST ERROR:');
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error(`Path: ${path}`);
+      console.error(`Error:`, error.message);
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       reject(error);
     });
 

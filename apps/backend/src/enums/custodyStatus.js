@@ -9,7 +9,8 @@ export const CustodyStatus = Object.freeze({
     LINKED: 'LINKED',         // Asset registered, awaiting mint
     MINTED: 'MINTED',         // Token minted and in custody vault
     WITHDRAWN: 'WITHDRAWN',   // Token transferred to external wallet
-    BURNED: 'BURNED'          // Token burned (physical redemption)
+    BURNED: 'BURNED',          // Token burned (physical redemption)
+    FAILED: 'FAILED'          // Operation or process failed
 });
 
 export const isValidCustodyStatus = (status) => {
@@ -20,10 +21,11 @@ export const canTransitionTo = (currentStatus, newStatus) => {
     const validTransitions = {
         [CustodyStatus.UNLINKED]: [CustodyStatus.PENDING],
         [CustodyStatus.PENDING]: [CustodyStatus.LINKED],
-        [CustodyStatus.LINKED]: [CustodyStatus.MINTED],
+        [CustodyStatus.LINKED]: [CustodyStatus.MINTED, CustodyStatus.FAILED],
         [CustodyStatus.MINTED]: [CustodyStatus.WITHDRAWN, CustodyStatus.BURNED],
         [CustodyStatus.WITHDRAWN]: [],
-        [CustodyStatus.BURNED]: []
+        [CustodyStatus.BURNED]: [],
+        [CustodyStatus.FAILED]: [CustodyStatus.LINKED] // Allow retrying from LINKED
     };
 
     return validTransitions[currentStatus]?.includes(newStatus) || false;

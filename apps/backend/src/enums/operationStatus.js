@@ -23,7 +23,7 @@ export const canTransitionTo = (currentStatus, newStatus) => {
         [OperationStatus.APPROVED]: [OperationStatus.EXECUTED, OperationStatus.FAILED],
         [OperationStatus.EXECUTED]: [],
         [OperationStatus.REJECTED]: [],
-        [OperationStatus.FAILED]: []
+        [OperationStatus.FAILED]: [OperationStatus.APPROVED]
     };
 
     return validTransitions[currentStatus]?.includes(newStatus) || false;

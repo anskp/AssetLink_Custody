@@ -76,9 +76,11 @@ export const mintToken = async (mintData, actor, context = {}) => {
     throw NotFoundError(`Asset ${assetId} not found in custody`);
   }
 
-  // Validate asset is in LINKED or MINTED status (for additional minting)
-  if (custodyRecord.status !== CustodyStatus.LINKED && custodyRecord.status !== CustodyStatus.MINTED) {
-    throw BadRequestError(`Asset must be in LINKED or MINTED status. Current status: ${custodyRecord.status}`);
+  // Validate asset is in LINKED, MINTED, or FAILED status
+  if (custodyRecord.status !== CustodyStatus.LINKED &&
+    custodyRecord.status !== CustodyStatus.MINTED &&
+    custodyRecord.status !== CustodyStatus.FAILED) {
+    throw BadRequestError(`Asset must be in LINKED, MINTED, or FAILED status. Current status: ${custodyRecord.status}`);
   }
 
   // If status is MINTED, ensure it has a tokenId for additional minting
@@ -387,8 +389,8 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
   logger.info('Starting mint status monitoring', { tokenLinkId, custodyRecordId, totalSupply });
 
   let attempts = 0;
-  const maxAttempts = 20; // Reduced attempts to reduce total API calls
-  const initialDelay = 5000; // 5 seconds (reduced for testing)
+  const maxAttempts = 60; // Increased to match copym-platform (10 minutes total monitoring time)
+  const initialDelay = 10000; // 10 seconds initial delay
   const maxDelay = 600000; // 10 minutes maximum delay between polls
 
   // Track active monitoring to prevent duplicate monitors
@@ -543,16 +545,16 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
 
       if (attempts < maxAttempts) {
         attempts++;
-        // Use exponential backoff with maximum cap to reduce API calls
-        // Start with 2min, then 3min, 4min, etc., up to 10 minutes
-        const exponentialDelay = Math.min(initialDelay + (attempts * 60000), maxDelay);
+        // Use consistent 10-second polling interval for faster detection
+        // Total monitoring time: 60 attempts * 10s = 10 minutes
+        const pollingDelay = 10000; // 10 seconds per poll
         logger.info('Waiting before next status check', {
           tokenLinkId,
           attempts,
-          delay: exponentialDelay
+          delay: pollingDelay
         });
 
-        await new Promise(resolve => setTimeout(resolve, exponentialDelay));
+        await new Promise(resolve => setTimeout(resolve, pollingDelay));
         await poll(); // Recursive call instead of setTimeout
       } else {
         logger.error('Mint monitoring timeout', {
