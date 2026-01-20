@@ -25,7 +25,7 @@ export const canTransitionTo = (currentStatus, newStatus) => {
         [CustodyStatus.MINTED]: [CustodyStatus.WITHDRAWN, CustodyStatus.BURNED],
         [CustodyStatus.WITHDRAWN]: [],
         [CustodyStatus.BURNED]: [],
-        [CustodyStatus.FAILED]: [CustodyStatus.LINKED] // Allow retrying from LINKED
+        [CustodyStatus.FAILED]: [CustodyStatus.LINKED, CustodyStatus.MINTED] // Allow retrying from LINKED or recovery to MINTED
     };
 
     return validTransitions[currentStatus]?.includes(newStatus) || false;

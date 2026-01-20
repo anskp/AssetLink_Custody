@@ -405,13 +405,8 @@ export const issueToken = async (vaultId, tokenConfig) => {
 
     logger.info('Creating token on Fireblocks (Manual API)...', { symbol, vaultId, payload });
 
-    // Log the full request for debugging
-    console.log('\n📤 FIREBLOCKS TOKENIZATION REQUEST:');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('Endpoint: POST /v1/tokenization/tokens');
-    console.log('Vault ID:', vaultId);
-    console.log('Payload:', JSON.stringify(payload, null, 2));
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    // Log parameters for debugging
+    logger.debug('Fireblocks tokenization request payload', { vaultId, payload });
 
     let result;
     try {
@@ -419,19 +414,11 @@ export const issueToken = async (vaultId, tokenConfig) => {
       result = await makeFireblocksRequest('/v1/tokenization/tokens', 'POST', payload);
     } catch (apiError) {
       // Log the raw error from Fireblocks
-      console.error('\n❌ FIREBLOCKS API ERROR:');
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('Error Message:', apiError.message);
-      console.error('Error Stack:', apiError.stack);
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      logger.error('Fireblocks API error', { error: apiError.message });
       throw apiError;
     }
 
-    // Log actual Fireblocks response to console for external API users
-    console.log('\n🔥 FIREBLOCKS RESPONSE:');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(JSON.stringify(result, null, 2));
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    logger.debug('Fireblocks tokenization response', { result });
 
     // Check if the response indicates immediate failure
     if (result.status === 'FAILED') {
@@ -526,13 +513,7 @@ const makeFireblocksRequest = async (path, method, payload) => {
               response: parsedData
             });
 
-            console.error('\n❌ FIREBLOCKS HTTP ERROR:');
-            console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.error(`Status Code: ${res.statusCode}`);
-            console.error(`Path: ${path}`);
-            console.error(`Response:`, JSON.stringify(parsedData, null, 2));
-            console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
+            logger.error(`Fireblocks API error: ${res.statusCode}`, { path, response: parsedData });
             reject(new Error(parsedData.message || `Fireblocks API Error: ${res.statusCode}`));
           } else {
             resolve(parsedData);
@@ -556,11 +537,7 @@ const makeFireblocksRequest = async (path, method, payload) => {
 
     req.on('error', (error) => {
       logger.error('HTTPS Request Error', { path, error: error.message });
-      console.error('\n❌ HTTPS REQUEST ERROR:');
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error(`Path: ${path}`);
-      console.error(`Error:`, error.message);
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      logger.error('HTTPS Request Error', { path, error: error.message });
       reject(error);
     });
 
@@ -623,18 +600,8 @@ export const getTokenizationStatus = async (tokenLinkId) => {
       });
 
       // Also console.log for immediate visibility in terminal
-      console.error('\n╔════════════════════════════════════════════════════════════╗');
-      console.error('║  🚨 FIREBLOCKS TOKEN MINTING FAILED - DETAILED ERROR 🚨   ║');
-      console.error('╠════════════════════════════════════════════════════════════╣');
-      console.error(`║  Token Link ID: ${tokenLinkId?.padEnd(42)} ║`);
-      console.error(`║  Status: ${linkedToken.status?.padEnd(49)} ║`);
-      console.error(`║  Substatus: ${(linkedToken.substatus || 'N/A')?.padEnd(46)} ║`);
-      console.error(`║  Error Message: ${(linkedToken.errorMessage || 'N/A')?.substring(0, 43).padEnd(43)} ║`);
-      console.error('╠════════════════════════════════════════════════════════════╣');
-      console.error('║  Full Response:                                            ║');
-      console.error('╚════════════════════════════════════════════════════════════╝');
-      console.error(JSON.stringify(linkedToken, null, 2));
-      console.error('═══════════════════════════════════════════════════════════════\n');
+      // Detailed logging via logger instead of console
+      logger.error('Token minting failed details', { fullResponse: linkedToken });
     }
 
     return {
@@ -677,10 +644,7 @@ export const mintTokens = async (tokenId, vaultAccountId, amount) => {
     logger.info('Minting additional tokens on Fireblocks...', { tokenId, vaultAccountId, amount });
     const result = await makeFireblocksRequest(`/v1/tokenization/tokens/${tokenId}/mint`, 'POST', payload);
 
-    console.log('\n🔥 FIREBLOCKS MINT RESPONSE:');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(JSON.stringify(result, null, 2));
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    logger.debug('Fireblocks mint response', { result });
 
     return result;
   } catch (error) {
