@@ -72,7 +72,8 @@ function generateJWT(path, bodyJson) {
  * Manual HTTPS request to Fireblocks
  */
 async function fireblocksRequest(path, method, payload) {
-    const data = JSON.stringify(payload);
+    // Only stringify if payload is not null
+    const data = payload ? JSON.stringify(payload) : '';
     const jwt = generateJWT(path, data);
     const baseUrl = new URL(config.fireblocks.baseUrl).hostname;
 
@@ -82,11 +83,15 @@ async function fireblocksRequest(path, method, payload) {
         method: method,
         headers: {
             'Content-Type': 'application/json',
-            'Content-Length': data.length,
             'X-API-Key': config.fireblocks.apiKey,
             'Authorization': `Bearer ${jwt}`
         }
     };
+
+    // Only add Content-Length if we have a body
+    if (data) {
+        options.headers['Content-Length'] = data.length;
+    }
 
     return new Promise((resolve, reject) => {
         const req = https.request(options, (res) => {
@@ -111,7 +116,10 @@ async function fireblocksRequest(path, method, payload) {
             reject(error);
         });
 
-        req.write(data);
+        // Only write body if we have data
+        if (data) {
+            req.write(data);
+        }
         req.end();
     });
 }
@@ -149,10 +157,48 @@ export const createUserVault = async (userName, userId) => {
             vaultName: response.data.name
         };
     } catch (error) {
-        logger.error('Failed to create vault account', { error: error.message });
+        logger.error('Failed to get vault details', { vaultId, error: error.message });
         throw error;
     }
 };
+
+/**
+ * Activate a blockchain asset in a vault
+ * This is required before the vault can receive transactions for that asset
+ */
+export const activateAssetInVault = async (vaultId, assetId) => {
+    if (shouldSimulate()) {
+        logger.warn('SIMULATION: Activating mock asset in vault');
+        return { success: true, simulated: true };
+    }
+
+    try {
+        logger.info('Activating asset in vault via manual API', { vaultId, assetId });
+
+        // Use manual HTTPS request to create asset in vault
+        // IMPORTANT: Send null (no body) instead of empty object
+        const response = await fireblocksRequest(`/v1/vault/accounts/${vaultId}/${assetId}`, 'POST', null);
+
+        logger.info('Asset activated in vault', { vaultId, assetId, response });
+        return { success: true };
+    } catch (error) {
+        // If asset already exists, that's fine
+        if (error.message?.includes('already exists') ||
+            error.message?.includes('Asset already activated') ||
+            error.message?.includes('Asset already created')) {
+            logger.info('Asset already activated in vault', { vaultId, assetId });
+            return { success: true, alreadyExists: true };
+        }
+
+        logger.error('Failed to activate asset in vault', {
+            vaultId,
+            assetId,
+            error: error.message
+        });
+        throw error;
+    }
+};
+
 
 /**
  * Get wallet address for an asset in a vault
@@ -353,6 +399,7 @@ export const monitorStatus = async (id, type = 'TRANSACTION') => {
 export default {
     createUserVault,
     getWalletAddress,
+    activateAssetInVault,
     issueToken,
     transferTokens,
     monitorStatus

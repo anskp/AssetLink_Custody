@@ -12,6 +12,7 @@ import { CustodyStatus } from '../../enums/custodyStatus.js';
 import { NotFoundError, BadRequestError } from '../../errors/ApiError.js';
 import { mapToFireblocksAsset } from '../../utils/blockchain.js';
 import logger from '../../utils/logger.js';
+import { getFireblocksClient } from '../../config/fireblocks.js';
 
 // Fixed gas vault ID
 const GAS_VAULT_ID = '88';
@@ -121,19 +122,25 @@ export const mintToken = async (mintData, actor, context = {}) => {
       vaultWalletId
     });
 
-    // Explicitly verify/create the wallet address in the vault
-    // This ensures the asset exists in the vault before we try to mint or transfer gas
+    // CRITICAL: Activate the blockchain asset in the vault BEFORE minting
+    // Fireblocks vaults need assets explicitly activated to receive transactions
+    logger.info(`🔧 Ensuring ${blockchainId} is activated in vault ${vaultWalletId}...`);
+
     try {
-      const walletAddress = await vaultFireblocksService.getWalletAddress(vaultWalletId, blockchainId);
-      logger.info('Verified vault wallet address', { vaultWalletId, blockchainId, walletAddress });
-    } catch (addressError) {
-      logger.error('Failed to verify vault wallet address', {
+      // Always activate the asset - if it already exists, activateAssetInVault will handle it gracefully
+      logger.info(`📝 Activating ${blockchainId} in vault ${vaultWalletId}...`);
+      await vaultFireblocksService.activateAssetInVault(vaultWalletId, blockchainId);
+
+      // Wait for Fireblocks to process the asset activation
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      logger.info(`✅ ${blockchainId} activation completed for vault ${vaultWalletId}`);
+    } catch (activationError) {
+      logger.error('Failed to activate asset in vault', {
         vaultWalletId,
         blockchainId,
-        error: addressError.message
+        error: activationError.message
       });
-      // We log but continue, letting ensureGasForVault try its own checks or fail
-      // This provides better diagnostics if it fails later
+      throw new Error(`Asset activation failed: ${activationError.message}`);
     }
 
     // Check if the vault has sufficient gas, and if not, transfer from vault 88
@@ -266,7 +273,7 @@ const ensureGasForVault = async (vaultId, blockchainId) => {
         });
 
         // If cached balance is sufficient, return early
-        if (cacheEntry.balance >= 0.001) {
+        if (cacheEntry.balance >= 0.015) {
           return;
         }
       }
@@ -287,8 +294,9 @@ const ensureGasForVault = async (vaultId, blockchainId) => {
       timestamp: now
     });
 
-    // Define minimum gas threshold (adjust as needed)
-    const minGasThreshold = 0.001; // Minimum 0.001 ETH equivalent for gas fees
+    // Define minimum gas threshold (must cover contract deployment fees)
+    // Fireblocks contract deployment requires ~0.0133 ETH
+    const minGasThreshold = 0.015; // Minimum 0.015 ETH to ensure sufficient funds for deployment
 
     if (gasBalance < minGasThreshold) {
       logger.info('Insufficient gas in vault, transferring from gas vault', {
@@ -299,7 +307,9 @@ const ensureGasForVault = async (vaultId, blockchainId) => {
       });
 
       // Transfer gas from the gas vault (88) to the target vault
-      const transferAmount = 0.002; // Transfer 0.002 ETH equivalent
+      // Fireblocks contract deployment requires ~0.0133 ETH for fees
+      // Transferring 0.02 ETH to ensure sufficient funds with buffer
+      const transferAmount = 0.02; // Increased from 0.002 to cover deployment fees
 
       const transferResult = await vaultFireblocksService.transferTokens(
         GAS_VAULT_ID,  // Source: gas vault
@@ -404,8 +414,8 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
   logger.info('Starting mint status monitoring', { tokenLinkId, custodyRecordId, totalSupply, vaultWalletId, tokenSymbol });
 
   let attempts = 0;
-  const maxAttempts = 60; // Increased to match copym-platform (10 minutes total monitoring time)
-  const initialDelay = 10000; // 10 seconds initial delay
+  const maxAttempts = 20; // Reduced to match old working code
+  const initialDelay = 5000; // 5 seconds initial delay (matches old code)
   const maxDelay = 600000; // 10 minutes maximum delay between polls
 
   // Track active monitoring to prevent duplicate monitors
@@ -505,71 +515,10 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
       }
 
       if (['FAILED', 'REJECTED', 'CANCELLED'].includes(currentStatus)) {
-        // RECOVERY CHECK:
-        // If status is FAILED, it might be due to a race condition (e.g. asset already created by parallel process).
-        // We check if the asset wallet address exists in the vault. If it does, we assume success.
-        if (tokenSymbol && vaultWalletId) {
-          try {
-            logger.info('Mint reported FAILED. Attempting recovery check...', { vaultWalletId, tokenSymbol });
-            // Attempt to get the wallet address for the token symbol
-            // Note: check blockchain specific asset ID if necessary, but symbol often works for Fireblocks custom assets or we might need mapping
-            const recoveredAddress = await vaultFireblocksService.getWalletAddress(vaultWalletId, tokenSymbol);
-
-            if (recoveredAddress) {
-              logger.info('✅ RECOVERY SUCCESS: Asset found in vault despite FAILED status!', { tokenSymbol, recoveredAddress });
-
-              // Manually force status to COMPLETED
-              const recoveryStatusData = {
-                ...statusData,
-                status: 'COMPLETED',
-                txHash: statusData.txHash || 'recov_tx_unknown', // We might not have hash
-                tokenMetadata: {
-                  ...statusData.tokenMetadata,
-                  contractAddress: recoveredAddress // Use the wallet address (or finding contract address would be better but this unblocks)
-                }
-              };
-
-              // Proceed to success handler logic (copy-paste or refactor? I'll just execute success logic here to avoid huge refactor)
-              logger.info('Token mint completed successfully (Recovered)', {
-                tokenLinkId,
-                txHash: recoveryStatusData.txHash,
-                custodyRecordId
-              });
-
-              await custodyService.updateCustodyStatus(
-                custodyRecordId,
-                CustodyStatus.MINTED,
-                {
-                  blockchain: recoveryStatusData.blockchainId || 'ETH_TEST5',
-                  tokenStandard: 'ERC20',
-                  tokenAddress: recoveredAddress, // Best guess
-                  tokenId: tokenLinkId,
-                  quantity: totalSupply || '1',
-                  txHash: recoveryStatusData.txHash,
-                  mintedAt: new Date()
-                },
-                actor,
-                context
-              );
-
-              await auditService.logTokenMinted(
-                custodyRecordId,
-                { tokenLinkId, contractAddress: recoveredAddress, txHash: recoveryStatusData.txHash, note: 'Recovered from FAILED status' },
-                actor,
-                context
-              );
-
-              activeMintMonitors.delete(monitoringKey);
-              return;
-            }
-          } catch (recoveryError) {
-            logger.warn('Recovery check failed', { error: recoveryError.message });
-            // Proceed to normal failure handling
-          }
-        }
-
-        // Extract detailed error info
-        const failureReason = `Fireblocks Error: [${statusData.substatus || 'N/A'}] - ${statusData.errorMessage || 'Unknown Error'}`;
+        // Extract detailed error info (if available - Fireblocks sometimes returns FAILED with no details)
+        const failureReason = statusData.substatus || statusData.errorMessage
+          ? `Fireblocks Error: [${statusData.substatus || 'N/A'}] - ${statusData.errorMessage || 'Unknown Error'}`
+          : 'Fireblocks returned FAILED status with no error details. Check Fireblocks console for transaction details.';
 
         logger.warn('Token mint failed', {
           tokenLinkId,
@@ -620,16 +569,16 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
 
       if (attempts < maxAttempts) {
         attempts++;
-        // Use consistent 10-second polling interval for faster detection
-        // Total monitoring time: 60 attempts * 10s = 10 minutes
-        const pollingDelay = 10000; // 10 seconds per poll
+        // Use exponential backoff with maximum cap (matches old working code)
+        // Start with 2min, then 3min, 4min, etc., up to 10 minutes
+        const exponentialDelay = Math.min(initialDelay + (attempts * 60000), maxDelay);
         logger.info('Waiting before next status check', {
           tokenLinkId,
           attempts,
-          delay: pollingDelay
+          delay: exponentialDelay
         });
 
-        await new Promise(resolve => setTimeout(resolve, pollingDelay));
+        await new Promise(resolve => setTimeout(resolve, exponentialDelay));
         await poll(); // Recursive call instead of setTimeout
       } else {
         logger.error('Mint monitoring timeout', {
