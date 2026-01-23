@@ -16,29 +16,30 @@ import logger from '../../utils/logger.js';
 export const createListingDashboard = async (req, res, next) => {
   try {
     const { assetId, price, currency, expiryDate, quantity } = req.body;
-    
+
     // Get user info from JWT token
     const userId = req.user?.sub; // JWT token uses 'sub' for user ID
     const userEmail = req.user?.email;
-    
+
     if (!userId) {
       throw new ApiError(401, 'User not authenticated');
     }
-    
+
     logger.info('Creating listing from dashboard', {
       assetId,
       userId,
       price
     });
-    
+
     // For dashboard, the platform owner is creating the listing
     // We'll use their user ID as both tenantId and sellerId
     const listing = await listingService.createListing(
       { assetId, price, currency, expiryDate, quantity },
+      userId, // tenantId
       userId, // sellerId
       { ipAddress: req.ip, userAgent: req.get('user-agent'), userId, userEmail }
     );
-    
+
     res.status(201).json({
       success: true,
       data: listing
@@ -58,20 +59,20 @@ export const createListingDashboard = async (req, res, next) => {
 export const listActiveListingsDashboard = async (req, res, next) => {
   try {
     const { assetType, priceMin, priceMax, blockchain, sortBy, sortOrder } = req.query;
-    
+
     const userId = req.user?.sub; // JWT token uses 'sub' for user ID
-    
+
     if (!userId) {
       throw new ApiError(401, 'User not authenticated');
     }
-    
+
     logger.info('Listing active listings from dashboard', {
       userId,
       assetType,
       priceMin,
       priceMax
     });
-    
+
     const listings = await listingService.listActiveListings({
       assetType,
       priceMin,
@@ -80,7 +81,7 @@ export const listActiveListingsDashboard = async (req, res, next) => {
       sortBy,
       sortOrder
     });
-    
+
     res.status(200).json({
       success: true,
       data: listings
@@ -100,15 +101,15 @@ export const listActiveListingsDashboard = async (req, res, next) => {
 export const getMyListingsDashboard = async (req, res, next) => {
   try {
     const userId = req.user?.sub; // JWT token uses 'sub' for user ID
-    
+
     if (!userId) {
       throw new ApiError(401, 'User not authenticated');
     }
-    
+
     logger.info('Getting my listings from dashboard', { userId });
-    
+
     const listings = await prisma.listing.findMany({
-      where: { 
+      where: {
         sellerId: userId
       },
       include: {
@@ -121,7 +122,7 @@ export const getMyListingsDashboard = async (req, res, next) => {
       },
       orderBy: { createdAt: 'desc' }
     });
-    
+
     // Enrich with custody record data
     const enrichedListings = await Promise.all(
       listings.map(async (listing) => {
@@ -131,14 +132,14 @@ export const getMyListingsDashboard = async (req, res, next) => {
             assetMetadata: true
           }
         });
-        
+
         return {
           ...listing,
           asset: custodyRecord
         };
       })
     );
-    
+
     res.status(200).json({
       success: true,
       data: enrichedListings
@@ -158,13 +159,13 @@ export const getMyListingsDashboard = async (req, res, next) => {
 export const getAllPortfoliosDashboard = async (req, res, next) => {
   try {
     const userId = req.user?.sub; // JWT token uses 'sub' for user ID
-    
+
     if (!userId) {
       throw new ApiError(401, 'User not authenticated');
     }
-    
+
     logger.info('Getting all portfolios from dashboard', { userId });
-    
+
     // Get all ownerships (platform owner sees everything)
     const ownerships = await prisma.ownership.findMany({
       include: {
@@ -176,7 +177,7 @@ export const getAllPortfoliosDashboard = async (req, res, next) => {
       },
       orderBy: { acquiredAt: 'desc' }
     });
-    
+
     res.status(200).json({
       success: true,
       data: ownerships
@@ -197,19 +198,19 @@ export const cancelListingDashboard = async (req, res, next) => {
   try {
     const { listingId } = req.params;
     const userId = req.user?.sub; // JWT token uses 'sub' for user ID
-    
+
     if (!userId) {
       throw new ApiError(401, 'User not authenticated');
     }
-    
+
     logger.info('Cancelling listing from dashboard', { listingId, userId });
-    
+
     const listing = await listingService.cancelListing(
       listingId,
       userId,
       { ipAddress: req.ip, userAgent: req.get('user-agent'), userId }
     );
-    
+
     res.status(200).json({
       success: true,
       data: listing
@@ -231,19 +232,19 @@ export const acceptBidDashboard = async (req, res, next) => {
   try {
     const { bidId } = req.params;
     const userId = req.user?.sub; // JWT token uses 'sub' for user ID
-    
+
     if (!userId) {
       throw new ApiError(401, 'User not authenticated');
     }
-    
+
     logger.info('Accepting bid from dashboard', { bidId, userId });
-    
+
     const result = await tradeService.acceptBid(
       bidId,
       userId,
       { ipAddress: req.ip, userAgent: req.get('user-agent'), userId }
     );
-    
+
     res.status(200).json({
       success: true,
       data: result
@@ -265,19 +266,19 @@ export const rejectBidDashboard = async (req, res, next) => {
   try {
     const { bidId } = req.params;
     const userId = req.user?.sub; // JWT token uses 'sub' for user ID
-    
+
     if (!userId) {
       throw new ApiError(401, 'User not authenticated');
     }
-    
+
     logger.info('Rejecting bid from dashboard', { bidId, userId });
-    
+
     const bid = await tradeService.rejectBid(
       bidId,
       userId,
       { ipAddress: req.ip, userAgent: req.get('user-agent'), userId }
     );
-    
+
     res.status(200).json({
       success: true,
       data: bid
@@ -298,13 +299,13 @@ export const rejectBidDashboard = async (req, res, next) => {
 export const getMintedTokensDashboard = async (req, res, next) => {
   try {
     const userId = req.user?.sub; // JWT token uses 'sub' for user ID
-    
+
     if (!userId) {
       throw new ApiError(401, 'User not authenticated');
     }
-    
+
     logger.info('Getting minted tokens from dashboard', { userId });
-    
+
     // Get all custody records with MINTED status
     // For dashboard users, we get all MINTED tokens where:
     // - They created it (createdBy = userId)
@@ -322,7 +323,7 @@ export const getMintedTokensDashboard = async (req, res, next) => {
       },
       orderBy: { mintedAt: 'desc' }
     });
-    
+
     res.status(200).json({
       success: true,
       data: mintedTokens

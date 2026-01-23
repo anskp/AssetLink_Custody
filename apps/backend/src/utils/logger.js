@@ -8,16 +8,19 @@ import { config } from '../config/env.js';
 
 const { combine, timestamp, printf, colorize, errors } = winston.format;
 
-// Custom log format
+// Custom human-friendly log format
 const customFormat = printf(({ level, message, timestamp, ...metadata }) => {
-    let msg = `${timestamp} [${level}]: ${message}`;
+    const service = metadata.service || 'asset-custody';
+    delete metadata.service; // Remove from standard metadata display
 
-    // Add metadata if present
-    if (Object.keys(metadata).length > 0) {
-        msg += ` ${JSON.stringify(metadata)}`;
-    }
+    const metaStr = Object.keys(metadata).length > 0
+        ? `\n   ${Object.entries(metadata).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ')}`
+        : '';
 
-    return msg;
+    // Clean up timestamps to just show time for easier reading in dev
+    const time = timestamp.split(' ')[1];
+
+    return `[${time}] ${level.padEnd(5)} | ${message}${metaStr}`;
 });
 
 // Create logger instance
@@ -30,15 +33,28 @@ const logger = winston.createLogger({
     ),
     defaultMeta: { service: 'assetlink-custody' },
     transports: [
-        // Console transport
         new winston.transports.Console({
             format: combine(
-                colorize(),
+                colorize({ all: true }),
                 customFormat
             )
         })
     ]
 });
+
+// Professional Banner for Human Readability
+if (config.nodeEnv !== 'production') {
+    process.nextTick(() => {
+        console.log('\x1b[36m%s\x1b[0m', `
+   ┌──────────────────────────────────────────────────────────┐
+   │                                                          │
+   │   🔗  ASSETLINK CUSTODY ENGINE IS ONLINE                │
+   │   🚀  Securely processing RWA on-chain operations        │
+   │                                                          │
+   └──────────────────────────────────────────────────────────┘
+        `);
+    });
+}
 
 // Add file transports in production
 if (config.nodeEnv === 'production') {

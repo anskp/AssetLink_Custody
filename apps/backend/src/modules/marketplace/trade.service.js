@@ -373,171 +373,6 @@ export const acceptBid = async (bidId, tenantId, sellerId, context = {}) => {
 /**
  * Execute direct purchase (immediate buy at listing price)
  */
-export const executePurchase = async (listingId, buyerId, paymentData = {}, context = {}) => {
-  // 1. Get listing with vault info
-  const listing = await prisma.listing.findUnique({
-    where: { id: listingId },
-    include: {
-      custodyRecord: {
-        include: {
-          vaultWallet: true
-        }
-      }
-    }
-  });
-
-  if (!listing) {
-    console.error('❌ Listing not found:', listingId);
-    throw NotFoundError(`Listing ${listingId} not found`);
-  }
-  console.log('✅ Listing found:', listing.id);
-
-  if (listing.status !== ListingStatus.ACTIVE) {
-    throw BadRequestError(`Cannot purchase listing with status ${listing.status}`);
-  }
-
-  if (listing.sellerId === buyerId) {
-    throw BadRequestError('Cannot purchase your own listing');
-  }
-
-  // 2. Handle Fireblocks Payment if source vault is provided
-  const { sourceVaultId, paymentAssetId = 'ETH_TEST5', walletAddress, quantity } = paymentData;
-  const purchaseQuantity = parseFloat(quantity || '1');
-  console.log('📦 Purchase Data:', { sourceVaultId, paymentAssetId, purchaseQuantity });
-  let fireblocksTxId = null;
-
-  if (sourceVaultId) {
-    const destinationVaultId = listing.custodyRecord?.vaultWallet?.fireblocksId;
-    if (!destinationVaultId) {
-      throw BadRequestError('Asset vault not configured for payment');
-    }
-
-    // Use priceEth for ETH payments, or priceUsd for stablecoins
-    const unitPrice = paymentAssetId.includes('USD') ? (listing.priceUsd || listing.price) : (listing.priceEth || listing.price);
-    const paymentAmount = parseFloat(unitPrice || '0') * purchaseQuantity;
-
-    if (isNaN(paymentAmount) || paymentAmount <= 0) {
-      throw BadRequestError(`Invalid payment amount: ${paymentAmount}. Unit Price: ${unitPrice}, Quantity: ${purchaseQuantity}`);
-    }
-
-    logger.info('Initiating Fireblocks payment for purchase', {
-      sourceVaultId,
-      destinationVaultId,
-      paymentAssetId,
-      amount: paymentAmount
-    });
-
-    try {
-      fireblocksTxId = await fireblocksService.transferTokens(
-        sourceVaultId,
-        destinationVaultId,
-        paymentAssetId,
-        paymentAmount
-      );
-    } catch (error) {
-      logger.error('Fireblocks payment failed', { error: error.message });
-      throw BadRequestError(`Payment failed: ${error.message}`);
-    }
-  }
-
-  // 3. Create a phantom 'ACCEPTED' bid to reuse trade logic
-
-  const totalAmount = parseFloat(listing.price || '0') * purchaseQuantity;
-
-  if (isNaN(totalAmount) || totalAmount <= 0) {
-    throw BadRequestError(`Invalid total amount: ${totalAmount}. Price: ${listing.price}, Quantity: ${purchaseQuantity}`);
-  }
-
-  // Check balance (Off-chain balance for ledger)
-  let buyerBalance = await prisma.userBalance.findUnique({
-    where: { userId: buyerId }
-  });
-
-
-
-  // If Fireblocks payment was successful, credit the off-chain balance temporarily
-  // This "bridges" the on-chain deposit to the off-chain ledger so acceptBid can succeed
-  if (fireblocksTxId) {
-    // Check if user exists first to avoid FK constraint error
-    const user = await prisma.user.findUnique({
-      where: { id: buyerId }
-    });
-
-    if (!user) {
-      // Lazy create user (External user from copym)
-      await prisma.user.create({
-        data: {
-          id: buyerId, // Use external ID
-          email: `${buyerId}@external.platform`, // Placeholder email
-          passwordHash: 'EXTERNAL_USER_HASH', // Placeholder hash
-          role: 'CLIENT'
-        }
-      });
-      logger.info('Lazy created external user', { userId: buyerId });
-    }
-
-    if (buyerBalance) {
-      buyerBalance = await prisma.userBalance.update({
-        where: { userId: buyerId },
-        data: {
-          balance: (parseFloat(buyerBalance.balance) + totalAmount).toString()
-        }
-      });
-    } else {
-      buyerBalance = await prisma.userBalance.create({
-        data: {
-          userId: buyerId,
-          balance: totalAmount.toString(),
-          currency: listing.currency || 'USD'
-        }
-      });
-    }
-    logger.info('Credited off-chain balance from Fireblocks payment', { buyerId, amount: totalAmount });
-  }
-
-  console.log('🔍 Checking buyer balance...', { buyerId, totalAmount });
-  if (!buyerBalance || parseFloat(buyerBalance.balance) < totalAmount) {
-    console.error('❌ Insufficient balance:', { balance: buyerBalance?.balance, required: totalAmount });
-    throw BadRequestError('Insufficient off-chain balance for direct purchase');
-  }
-
-  // Validate that the requested quantity is available
-  const availableQuantity = parseFloat(listing.quantityListed) - parseFloat(listing.quantitySold);
-  console.log('📊 Available Quantity:', availableQuantity);
-  if (purchaseQuantity > availableQuantity) {
-    console.error('❌ Insufficient quantity:', { availableQuantity, purchaseQuantity });
-    throw BadRequestError(`Insufficient quantity available. Requested: ${purchaseQuantity}, Available: ${availableQuantity}`);
-  }
-
-  console.log('📝 Creating bid...');
-
-  // Create the bid
-  const bid = await prisma.bid.create({
-    data: {
-      listingId,
-      tenantId: listing.tenantId,
-      buyerId,
-      amount: listing.price,
-      quantity: purchaseQuantity.toString(),
-      status: BidStatus.PENDING
-    }
-  });
-  console.log('✅ Bid created:', bid.id);
-
-  // Accept the bid (ledger update)
-  console.log('🤝 Accepting bid...', { bidId: bid.id, tenantId: listing.tenantId, sellerId: listing.sellerId });
-  const result = await acceptBid(bid.id, listing.tenantId, listing.sellerId, {
-    ...context,
-    sourceVaultId,  // ✅ PASS TO acceptBid FOR TRANSFER TRACKING
-    fireblocksTxId, // Pass to audit log
-    walletAddress   // Pass wallet address for ledger
-  });
-
-  return {
-    ...result,
-    fireblocksTxId
-  };
-};
 
 /**
  * Reject a bid
@@ -611,10 +446,268 @@ export const getListingBids = async (listingId) => {
   return bids;
 };
 
+
+// Helper to ensure user exists to avoid foreign key errors
+const ensureUserExists = async (userId, tx) => {
+  if (!userId) return;
+
+  const user = await tx.user.findUnique({
+    where: { id: userId }
+  });
+
+  if (!user) {
+    console.log(`👤 Creating missing user ${userId} in AssetLink to satisfy foreign key...`);
+    // Create a placeholder user
+    await tx.user.create({
+      data: {
+        id: userId,
+        email: `user_${userId}@copym.xyz`, // Placeholder email
+        role: 'CLIENT',                   // Default role from schema
+        passwordHash: 'PLACEHOLDER_HASH_IMPLICIT_USER' // Required field
+      }
+    });
+  }
+};
+
+
+export const executePurchase = async (listingId, buyerId, paymentData = {}, context = {}) => {
+  // 1. Get listing with vault info
+  const listing = await prisma.listing.findUnique({
+    where: { id: listingId },
+    include: {
+      custodyRecord: {
+        include: {
+          vaultWallet: true
+        }
+      }
+    }
+  });
+
+  if (!listing) {
+    console.error('❌ Listing not found:', listingId);
+    throw NotFoundError(`Listing ${listingId} not found`);
+  }
+  console.log('✅ Listing found:', listing.id);
+
+  if (listing.status !== ListingStatus.ACTIVE) {
+    throw BadRequestError(`Cannot purchase listing with status ${listing.status}`);
+  }
+
+  if (listing.sellerId === buyerId) {
+    throw BadRequestError('Cannot purchase your own listing');
+  }
+
+  // 2. Handle Fireblocks Payment if source vault is provided
+  const { sourceVaultId, paymentAssetId = 'ETH_TEST5', walletAddress, quantity } = paymentData;
+  const purchaseQuantity = parseFloat(quantity || '1');
+  console.log('📦 Purchase Data:', { sourceVaultId, paymentAssetId, purchaseQuantity });
+  let fireblocksTxId = null;
+  let fireblocksTxHash = null;
+
+  if (sourceVaultId) {
+    const destinationVaultId = listing.custodyRecord?.vaultWallet?.fireblocksId;
+    if (!destinationVaultId) {
+      throw BadRequestError('Asset vault not configured for payment');
+    }
+
+    // Use priceEth for ETH payments, or priceUsd for stablecoins
+    const unitPrice = paymentAssetId.includes('USD') ? (listing.priceUsd || listing.price) : (listing.priceEth || listing.price);
+    const paymentAmount = parseFloat(unitPrice || '0') * purchaseQuantity;
+
+    if (isNaN(paymentAmount) || paymentAmount <= 0) {
+      throw BadRequestError(`Invalid payment amount: ${paymentAmount}. Unit Price: ${unitPrice}, Quantity: ${purchaseQuantity}`);
+    }
+
+    logger.info('Initiating Fireblocks payment for purchase', {
+      sourceVaultId,
+      destinationVaultId,
+      paymentAssetId,
+      amount: paymentAmount
+    });
+
+    // 2.5 Pre-purchase Balance Check (On-chain)
+    try {
+      const balance = await fireblocksService.getVaultBalance(sourceVaultId, paymentAssetId);
+      if (balance < paymentAmount) {
+        throw BadRequestError(`Insufficient funds in vault: You need ${paymentAmount} ${paymentAssetId} but only have ${balance} ${paymentAssetId}.`);
+      }
+      console.log(`✅ On-chain balance verified: ${balance} ${paymentAssetId} available`);
+    } catch (balanceError) {
+      if (balanceError.status === 400) throw balanceError;
+      logger.warn('Could not verify on-chain balance, proceeding anyway:', balanceError.message);
+    }
+
+    try {
+      fireblocksTxId = await fireblocksService.transferTokens(
+        sourceVaultId,
+        destinationVaultId,
+        paymentAssetId,
+        paymentAmount
+      );
+
+      // Create a CustodyOperation to track this payment transaction
+      await prisma.custodyOperation.create({
+        data: {
+          operationType: 'TRANSFER',
+          status: OperationStatus.PENDING_MAKER, // Or another appropriate status like BROADCASTING
+          fireblocksTaskId: fireblocksTxId,
+          initiatedBy: buyerId,
+          vaultWalletId: listing.custodyRecord?.vaultWallet?.id,
+          payload: {
+            action: 'MARKETPLACE_PURCHASE',
+            listingId: listingId,
+            assetId: paymentAssetId,
+            amount: paymentAmount,
+            sourceVaultId,
+            destinationVaultId
+          }
+        }
+      });
+      console.log('📝 Created CustodyOperation for payment tracking:', fireblocksTxId);
+
+      // POLL FOR TX HASH (Wait up to 5 seconds)
+      fireblocksTxHash = null;
+      try {
+        logger.info('⏳ Polling for Fireblocks TX Hash...');
+        for (let i = 0; i < 5; i++) {
+          await new Promise(r => setTimeout(r, 1000)); // Wait 1s
+          const status = await fireblocksService.monitorStatus(fireblocksTxId);
+          if (status && status.txHash) {
+            fireblocksTxHash = status.txHash;
+            logger.info('✅ Found On-Chain Hash:', { txHash: fireblocksTxHash });
+
+            // Update the operation record
+            await prisma.custodyOperation.update({
+              where: { fireblocksTaskId: fireblocksTxId },
+              data: {
+                txHash: fireblocksTxHash,
+                status: OperationStatus.EXECUTED
+              }
+            });
+            break;
+          }
+        }
+      } catch (pollError) {
+        logger.warn('⚠️ Failed to poll for hash, proceeding without it:', pollError.message);
+      }
+
+    } catch (error) {
+      logger.error('Fireblocks payment failed', { error: error.message });
+      throw BadRequestError(`Payment failed: ${error.message}`);
+    }
+  }
+
+  // 3. Create a phantom 'ACCEPTED' bid to reuse trade logic
+
+  const totalAmount = parseFloat(listing.price || '0') * purchaseQuantity;
+
+  if (isNaN(totalAmount) || totalAmount <= 0) {
+    throw BadRequestError(`Invalid total amount: ${totalAmount}. Price: ${listing.price}, Quantity: ${purchaseQuantity}`);
+  }
+
+  // Check balance (Off-chain balance for ledger)
+  let buyerBalance = await prisma.userBalance.findUnique({
+    where: { userId: buyerId }
+  });
+
+  // If Fireblocks payment was successful, credit the off-chain balance temporarily
+  // This "bridges" the on-chain deposit to the off-chain ledger so acceptBid can succeed
+  if (fireblocksTxId) {
+    // Check if user exists first to avoid FK constraint error
+    await ensureUserExists(buyerId, prisma);
+
+    if (buyerBalance) {
+      buyerBalance = await prisma.userBalance.update({
+        where: { userId: buyerId },
+        data: {
+          balance: (parseFloat(buyerBalance.balance) + totalAmount).toString()
+        }
+      });
+    } else {
+      buyerBalance = await prisma.userBalance.create({
+        data: {
+          userId: buyerId,
+          balance: totalAmount.toString(),
+          currency: listing.currency || 'USD'
+        }
+      });
+    }
+    logger.info('Credited off-chain balance from Fireblocks payment', { buyerId, amount: totalAmount });
+  }
+
+  console.log('🔍 Checking buyer balance...', { buyerId, totalAmount });
+
+  // Ensure we have a balance record to check against, initializing user if needed
+  if (!buyerBalance) {
+    await ensureUserExists(buyerId, prisma);
+
+    // Check again
+    buyerBalance = await prisma.userBalance.findUnique({ where: { userId: buyerId } });
+
+    if (!buyerBalance) {
+      // Create zero balance if missing
+      buyerBalance = await prisma.userBalance.create({
+        data: {
+          userId: buyerId,
+          balance: '0',
+          currency: listing.currency || 'ETH'
+        }
+      });
+    }
+  }
+
+  if (parseFloat(buyerBalance.balance) < totalAmount) {
+    console.error('❌ Insufficient balance:', { balance: buyerBalance?.balance, required: totalAmount });
+    throw BadRequestError('Insufficient off-chain balance for direct purchase');
+  }
+
+  // Validate that the requested quantity is available
+  const availableQuantity = parseFloat(listing.quantityListed) - parseFloat(listing.quantitySold);
+  console.log('📊 Available Quantity:', availableQuantity);
+  if (purchaseQuantity > availableQuantity) {
+    console.error('❌ Insufficient quantity:', { availableQuantity, purchaseQuantity });
+    throw BadRequestError(`Insufficient quantity available. Requested: ${purchaseQuantity}, Available: ${availableQuantity}`);
+  }
+
+  console.log('📝 Creating bid...');
+
+  // Ensure seller exists before bid creation
+  await ensureUserExists(listing.sellerId, prisma);
+
+  // Create the bid
+  const bid = await prisma.bid.create({
+    data: {
+      listingId,
+      tenantId: listing.tenantId,
+      buyerId,
+      amount: listing.price,
+      quantity: purchaseQuantity.toString(),
+      status: BidStatus.PENDING
+    }
+  });
+  console.log('✅ Bid created:', bid.id);
+
+  // Accept the bid (ledger update)
+  console.log('🤝 Accepting bid...', { bidId: bid.id, tenantId: listing.tenantId, sellerId: listing.sellerId });
+  const result = await acceptBid(bid.id, listing.tenantId, listing.sellerId, {
+    ...context,
+    sourceVaultId,  // ✅ PASS TO acceptBid FOR TRANSFER TRACKING
+    fireblocksTxId, // Pass to audit log
+    walletAddress   // Pass wallet address for ledger
+  });
+
+  return {
+    ...result,
+    fireblocksTxId,
+    txHash: fireblocksTxHash
+  };
+};
+
 export default {
   placeBid,
   acceptBid,
   rejectBid,
   getListingBids,
+  executePurchase, // Export the new function
   BidStatus
 };

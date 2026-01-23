@@ -366,6 +366,25 @@ export const transferTokens = async (fromVaultId, toVaultId, assetId, amount) =>
 };
 
 /**
+ * Get balance of a specific asset in a vault
+ */
+export const getVaultBalance = async (vaultId, assetId) => {
+    if (shouldSimulate()) {
+        return 1000; // Mock balance
+    }
+
+    try {
+        const response = await fireblocksRequest(`/v1/vault/accounts/${vaultId}/${assetId}`, 'GET', null);
+        return parseFloat(response.data?.available || response.data?.total || '0');
+    } catch (error) {
+        if (error.message?.includes('not found') || error.message?.includes('404')) {
+            return 0;
+        }
+        throw error;
+    }
+};
+
+/**
  * Monitor a transaction or tokenization task status
  */
 export const monitorStatus = async (id, type = 'TRANSACTION') => {
@@ -402,5 +421,6 @@ export default {
     activateAssetInVault,
     issueToken,
     transferTokens,
+    getVaultBalance,
     monitorStatus
 };

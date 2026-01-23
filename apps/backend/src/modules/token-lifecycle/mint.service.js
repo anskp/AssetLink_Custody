@@ -12,6 +12,7 @@ import { CustodyStatus } from '../../enums/custodyStatus.js';
 import { NotFoundError, BadRequestError } from '../../errors/ApiError.js';
 import { mapToFireblocksAsset } from '../../utils/blockchain.js';
 import logger from '../../utils/logger.js';
+import webhookService from '../../utils/webhook.service.js';
 import { getFireblocksClient } from '../../config/fireblocks.js';
 
 // Fixed gas vault ID
@@ -449,6 +450,16 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
         attempts
       });
 
+      // Send webhook for status update
+      webhookService.notifyStatusUpdate('mint.updated', {
+        tokenLinkId,
+        custodyRecordId,
+        operationId: context.operationId,
+        status: currentStatus,
+        txHash,
+        attempts
+      });
+
       // Update the operation record with the granular Fireblocks status
       if (context.operationId) {
         try {
@@ -509,6 +520,17 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
           context
         );
 
+        // Notify COPYm that minting is complete
+        webhookService.notifyStatusUpdate('mint.completed', {
+          tokenLinkId,
+          custodyRecordId,
+          operationId: context.operationId,
+          status: 'COMPLETED',
+          txHash,
+          contractAddress: statusData.tokenMetadata?.contractAddress || statusData.tokenAddress,
+          assetId: statusData.assetId
+        });
+
         // Remove from active monitors
         activeMintMonitors.delete(monitoringKey);
         return;
@@ -560,6 +582,16 @@ const monitorMintingStatus = async (tokenLinkId, custodyRecordId, totalSupply, a
           fullResponse: statusData,
           action: failureReason
         }, { custodyRecordId });
+
+        // Notify COPYm about the failure
+        webhookService.notifyStatusUpdate('mint.failed', {
+          tokenLinkId,
+          custodyRecordId,
+          operationId: context.operationId,
+          status: 'FAILED',
+          reason: failureReason,
+          fireblocksError: statusData
+        });
 
 
         // Remove from active monitors

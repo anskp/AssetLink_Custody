@@ -3,6 +3,7 @@ import * as auditService from '../audit/audit.service.js';
 import { CustodyStatus, canTransitionTo } from '../../enums/custodyStatus.js';
 import { ConflictError, NotFoundError, BadRequestError } from '../../errors/ApiError.js';
 import logger from '../../utils/logger.js';
+import webhookService from '../../utils/webhook.service.js';
 
 /**
  * Custody Service
@@ -126,68 +127,85 @@ export const approveCustodyLink = async (id, tenantId, actor, context = {}) => {
         throw BadRequestError(`Cannot approve custody record with status ${custodyRecord.status}`);
     }
 
-    // Import required services
-    const fireblocksService = await import('../vault/fireblocks.service.js');
-    const prisma = (await import('../../config/db.js')).default;
-
-    // Create a new Fireblocks vault for this asset
-    const vaultName = `${custodyRecord.assetId.replace(/[^a-zA-Z0-9]/g, '_')}_VAULT_${Date.now()}`;
-
-    logger.info('Creating Fireblocks vault for custody approval', {
+    logger.info('Custody link approval initiated', {
         custodyRecordId: id,
-        assetId: custodyRecord.assetId,
-        vaultName
+        assetId: custodyRecord.assetId
     });
 
-    const vaultResult = await fireblocksService.createUserVault(vaultName, id);
-    const fireblocksVaultId = vaultResult.vaultId;
+    // Run the actual vault creation and linking in the background
+    const processApproval = async () => {
+        try {
+            // Import required services
+            const fireblocksService = await import('../vault/fireblocks.service.js');
+            const prisma = (await import('../../config/db.js')).default;
 
-    logger.info('Empty Fireblocks vault created for custody', {
-        vaultId: fireblocksVaultId,
-        custodyRecordId: id
-    });
+            // Create a new Fireblocks vault for this asset
+            const vaultName = `${custodyRecord.assetId.replace(/[^a-zA-Z0-9]/g, '_')}_VAULT_${Date.now()}`;
+            const vaultResult = await fireblocksService.createUserVault(vaultName, id);
+            const fireblocksVaultId = vaultResult.vaultId;
 
-    // Create a VaultWallet record to track this empty vault
-    const vaultWalletRecord = await prisma.vaultWallet.create({
-        data: {
-            fireblocksId: fireblocksVaultId,
-            blockchain: null, // No blockchain asset yet
-            address: null, // No wallet address yet (created during minting)
-            vaultType: 'CUSTODY',
-            isActive: true
+            // Create a VaultWallet record
+            const vaultWalletRecord = await prisma.vaultWallet.create({
+                data: {
+                    fireblocksId: fireblocksVaultId,
+                    blockchain: null,
+                    address: null,
+                    vaultType: 'CUSTODY',
+                    isActive: true
+                }
+            });
+
+            // Update to LINKED status
+            const updated = await custodyRepository.updateStatus(id, CustodyStatus.LINKED, {
+                linkedAt: new Date(),
+                vaultWalletId: vaultWalletRecord.id
+            });
+
+            // Log audit event
+            await auditService.logEvent('CUSTODY_APPROVED', {
+                assetId: custodyRecord.assetId,
+                vaultId: fireblocksVaultId
+            }, {
+                custodyRecordId: id,
+                actor,
+                ...context
+            });
+
+            // Notify COPYm that custody linking is complete
+            webhookService.notifyStatusUpdate('custody.completed', {
+                id,
+                status: CustodyStatus.LINKED,
+                assetId: custodyRecord.assetId,
+                fireblocksVaultId,
+                vaultWalletId: vaultWalletRecord.id
+            });
+
+            logger.info('Custody link approved and completed successfully in background', {
+                custodyRecordId: id,
+                vaultId: fireblocksVaultId
+            });
+        } catch (error) {
+            logger.error('Background custody approval failed', { custodyRecordId: id, error: error.message });
+
+            // Revert status to PENDING or mark as FAILED? 
+            // For now, let's notify COPYm about the failure
+            webhookService.notifyStatusUpdate('custody.failed', {
+                id,
+                status: 'FAILED',
+                assetId: custodyRecord.assetId,
+                error: error.message
+            });
         }
-    });
+    };
 
-    logger.info('VaultWallet record created in database', {
-        vaultWalletId: vaultWalletRecord.id,
-        fireblocksId: fireblocksVaultId
-    });
+    // Execute in background
+    processApproval();
 
-    // Update to LINKED status with vault information
-    const updated = await custodyRepository.updateStatus(id, CustodyStatus.LINKED, {
-        linkedAt: new Date(),
-        vaultWalletId: vaultWalletRecord.id
+    // Return the pending-link status immediately
+    return enrichCustodyRecord({
+        ...custodyRecord,
+        status: CustodyStatus.LINKED // Optimistic for the response, but background will finalize
     });
-
-    // Log audit event
-    await auditService.logEvent('CUSTODY_APPROVED', {
-        assetId: custodyRecord.assetId,
-        vaultId: fireblocksVaultId
-    }, {
-        custodyRecordId: id,
-        actor,
-        ...context
-    });
-
-    logger.info('Custody link approved with empty Fireblocks vault', {
-        custodyRecordId: id,
-        assetId: custodyRecord.assetId,
-        tenantId,
-        actor,
-        vaultId: fireblocksVaultId
-    });
-
-    return enrichCustodyRecord(updated);
 };
 
 /**

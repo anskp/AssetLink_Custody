@@ -11,7 +11,7 @@ import logger from '../utils/logger.js';
 const prismaClientSingleton = () => {
     return new PrismaClient({
         log: config.nodeEnv === 'development'
-            ? ['query', 'info', 'warn', 'error']
+            ? ['info', 'warn', 'error']
             : ['warn', 'error'],
         errorFormat: 'pretty'
     });

@@ -389,6 +389,8 @@ export const getMyListings = async (req, res, next) => {
       orderBy: { createdAt: 'desc' }
     });
 
+    logger.info('Found listings for seller', { count: listings.length, sellerId });
+
     res.status(200).json({
       success: true,
       data: listings

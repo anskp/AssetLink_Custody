@@ -14,6 +14,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from '../../errors/Api
 import logger from '../../utils/logger.js';
 import prisma from '../../config/db.js';
 import { mapToFireblocksAsset } from '../../utils/blockchain.js';
+import webhookService from '../../utils/webhook.service.js';
 
 /**
  * Operation Service
@@ -198,7 +199,16 @@ export const approveOperation = async (operationId, actor, context = {}, skipMak
     logger.info('Operation approved', { operationId, approvedBy: actor });
 
     // For Sprint 4 (Mocking), we auto-execute approved operations
-    return await executeOperation(operationId, actor, context);
+    // NOTE: executeOperation is intentionaly NOT awaited here to prevent timeouts in the caller (COPYm)
+    // The actual work happens in the background.
+    executeOperation(operationId, actor, context).catch(err => {
+        logger.error('Background operation execution failed', { operationId, error: err.message });
+    });
+
+    // Notify COPYm immediately about the approval
+    webhookService.notifyStatusUpdate('operation.updated', updated);
+
+    return updated;
 };
 
 /**

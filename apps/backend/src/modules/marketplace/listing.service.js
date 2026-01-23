@@ -22,7 +22,7 @@ export const ListingStatus = {
 /**
  * Create a new listing
  */
-export const createListing = async (data, sellerId, context = {}) => {
+export const createListing = async (data, tenantId, sellerId, context = {}) => {
   const { assetId, price, currency, expiryDate, quantity } = data;
 
   // Validate required parameters
@@ -50,8 +50,7 @@ export const createListing = async (data, sellerId, context = {}) => {
     throw BadRequestError(`Asset must be minted before listing. Current status: ${custodyRecord.status}`);
   }
 
-  // For dashboard users, we need to create an ownership record if it doesn't exist
-  // Check if ownership exists
+  // For dashboard users, we need to ensure they actually own the asset
   let ownership = await prisma.ownership.findUnique({
     where: {
       assetId_ownerId: {
@@ -61,35 +60,59 @@ export const createListing = async (data, sellerId, context = {}) => {
     }
   });
 
-  // If no ownership exists, create one (platform owner owns the minted token initially)
+  // If no ownership exists, check if the seller is the original creator
+  // NOTE: In multi-tenant systems, the 'tenantId' is often the creator of the custody record
   if (!ownership) {
-    ownership = await prisma.ownership.create({
-      data: {
-        assetId,
-        custodyRecordId: custodyRecord.id,
-        tenantId: custodyRecord.tenantId,
-        ownerId: sellerId,
-        quantity: quantity || '1',
-        purchasePrice: '0', // Initial minting, no purchase price
-        purchasePriceUsd: '0',
-        purchasePriceEth: '0',
-        currency: currency || 'USD'
-      }
-    });
+    if (custodyRecord.createdBy === sellerId || (custodyRecord.tenantId === sellerId)) {
+      // Create initial ownership record for the issuer
+      ownership = await prisma.ownership.create({
+        data: {
+          assetId,
+          custodyRecordId: custodyRecord.id,
+          tenantId: custodyRecord.tenantId,
+          ownerId: sellerId,
+          quantity: custodyRecord.quantity || '0', // Full initial supply
+          purchasePrice: '0',
+          purchasePriceUsd: '0',
+          purchasePriceEth: '0',
+          currency: currency || 'USD'
+        }
+      });
 
-    logger.info('Created initial ownership record for listing', {
-      assetId,
-      ownerId: sellerId,
-      quantity: quantity || '1'
-    });
+      logger.info('Created initial ownership record for issuer listing', {
+        assetId,
+        ownerId: sellerId,
+        initialQuantity: custodyRecord.quantity
+      });
+    } else {
+      throw ForbiddenError('You do not own this asset and cannot list it.');
+    }
   }
 
-  // Verify user has enough quantity to list
-  const availableQuantity = parseFloat(ownership.quantity);
-  const listingQuantity = parseFloat(quantity || '1');
+  // Verify user has enough quantity to list, accounting for existing active listings
+  const ownershipQuantity = parseFloat(ownership.quantity);
+  const requestedListingQuantity = parseFloat(quantity || '1');
 
-  if (availableQuantity < listingQuantity) {
-    throw BadRequestError(`Insufficient quantity. Available: ${availableQuantity}, Requested: ${listingQuantity}`);
+  // Get all active listings by this seller for this asset
+  const activeListings = await prisma.listing.findMany({
+    where: {
+      assetId,
+      sellerId,
+      status: ListingStatus.ACTIVE
+    }
+  });
+
+  const alreadyListedQuantity = activeListings.reduce((sum, l) => {
+    const remainingInListing = parseFloat(l.quantityListed) - parseFloat(l.quantitySold);
+    return sum + remainingInListing;
+  }, 0);
+
+  const availableToList = ownershipQuantity - alreadyListedQuantity;
+
+  console.log(`📊 AssetLink Balance Check: Owned=${ownershipQuantity}, AlreadyListed=${alreadyListedQuantity}, Available=${availableToList}, Requested=${requestedListingQuantity}`);
+
+  if (availableToList < requestedListingQuantity) {
+    throw BadRequestError(`Insufficient quantity to list. You own ${ownershipQuantity}, but ${alreadyListedQuantity} are already tied up in active listings. Max available: ${availableToList}`);
   }
 
   // Create listing
