@@ -10,6 +10,7 @@ export const CustodyStatus = Object.freeze({
     MINTED: 'MINTED',         // Token minted and in custody vault
     WITHDRAWN: 'WITHDRAWN',   // Token transferred to external wallet
     BURNED: 'BURNED',          // Token burned (physical redemption)
+    FROZEN: 'FROZEN',          // Token frozen internally
     FAILED: 'FAILED'          // Operation or process failed
 });
 
@@ -22,9 +23,10 @@ export const canTransitionTo = (currentStatus, newStatus) => {
         [CustodyStatus.UNLINKED]: [CustodyStatus.PENDING],
         [CustodyStatus.PENDING]: [CustodyStatus.LINKED],
         [CustodyStatus.LINKED]: [CustodyStatus.MINTED, CustodyStatus.FAILED],
-        [CustodyStatus.MINTED]: [CustodyStatus.WITHDRAWN, CustodyStatus.BURNED],
+        [CustodyStatus.MINTED]: [CustodyStatus.WITHDRAWN, CustodyStatus.BURNED, CustodyStatus.FROZEN],
         [CustodyStatus.WITHDRAWN]: [],
         [CustodyStatus.BURNED]: [],
+        [CustodyStatus.FROZEN]: [CustodyStatus.MINTED], // Can be un-frozen back to MINTED
         [CustodyStatus.FAILED]: [CustodyStatus.LINKED, CustodyStatus.MINTED] // Allow retrying from LINKED or recovery to MINTED
     };
 

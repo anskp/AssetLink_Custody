@@ -171,6 +171,7 @@ components:
         - MINTED
         - WITHDRAWN
         - BURNED
+        - FROZEN
     
     OperationStatus:
       type: string
@@ -1278,6 +1279,137 @@ paths:
                   status:
                     $ref: '#/components/schemas/OperationStatus'
 
+  /operations/freeze:
+    post:
+      tags:
+        - Operations
+      summary: Create freeze operation (Maker)
+      description: Create an internal token freeze operation (requires checker approval)
+      security:
+        - HmacAuth: []
+      parameters:
+        - name: X-USER-ID
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-SIGNATURE
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-TIMESTAMP
+          in: header
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - assetId
+              properties:
+                assetId:
+                  type: string
+      responses:
+        '201':
+          description: Freeze operation created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  type:
+                    type: string
+                    example: FREEZE
+                  status:
+                    $ref: '#/components/schemas/OperationStatus'
+
+  /operations/admin/burn:
+    post:
+      tags:
+        - Operations
+      summary: Direct token burn (Admin)
+      description: Directly burn tokens without needing a separate approval step (checker role required)
+      security:
+        - HmacAuth: []
+      parameters:
+        - name: X-SIGNATURE
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-TIMESTAMP
+          in: header
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - assetId
+                - amount
+              properties:
+                assetId:
+                  type: string
+                amount:
+                  type: string
+      responses:
+        '201':
+          description: Burn executed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /operations/admin/freeze:
+    post:
+      tags:
+        - Operations
+      summary: Direct token freeze (Admin)
+      description: Directly freeze tokens without needing a separate approval step (checker role required)
+      security:
+        - HmacAuth: []
+      parameters:
+        - name: X-SIGNATURE
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-TIMESTAMP
+          in: header
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - assetId
+              properties:
+                assetId:
+                  type: string
+      responses:
+        '201':
+          description: Freeze executed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+
   /operations:
     get:
       tags:
@@ -1305,7 +1437,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [MINT, WITHDRAW, BURN]
+            enum: [MINT, WITHDRAW, BURN, FREEZE, UNFREEZE]
         - name: limit
           in: query
           schema:

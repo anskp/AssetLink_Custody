@@ -1,0 +1,111 @@
+[36m
+   ┌──────────────────────────────────────────────────────────┐
+   │                                                          │
+   │   🔗  ASSETLINK CUSTODY ENGINE IS ONLINE                │
+   │   🚀  Securely processing RWA on-chain operations        │
+   │                                                          │
+   └──────────────────────────────────────────────────────────┘
+        [0m
+prisma:info Starting a mysql pool with 17 connections.
+[
+  {
+    "id": "97f94bcf-caee-4533-85d8-6412adc3f2f9",
+    "assetId": "63",
+    "status": "MINTED",
+    "tenantId": "023c9c2f-286c-42b3-9ffc-d0874413e6bf",
+    "createdBy": "2122",
+    "blockchain": "ETH_TEST5",
+    "tokenStandard": "ERC20",
+    "tokenAddress": "0x3598510B90D8dD59AAB469e63d47789Ec19A22c8",
+    "tokenId": "b3c98b7b-d7b8-4dec-b14e-02c1094befbc",
+    "quantity": "10",
+    "vaultWalletId": "22030e5c-e515-49a7-8bcf-e66bd3c00254",
+    "linkedAt": null,
+    "mintedAt": "2026-01-24T10:39:54.194Z",
+    "withdrawnAt": null,
+    "burnedAt": null,
+    "createdAt": "2026-01-24T10:36:20.371Z",
+    "updatedAt": "2026-01-24T10:39:54.195Z",
+    "publicContractAddress": "alca_eth_dm3gmsjk"
+  },
+  {
+    "id": "5a904240-8ae8-4be7-af32-210c0d4a4f0c",
+    "assetId": "62",
+    "status": "MINTED",
+    "tenantId": "023c9c2f-286c-42b3-9ffc-d0874413e6bf",
+    "createdBy": "2122",
+    "blockchain": "ETH_TEST5",
+    "tokenStandard": "ERC20",
+    "tokenAddress": "0xBee700aa349F19114eA5689C8bc692dC35c1F4F5",
+    "tokenId": "986b4421-61e9-4a2b-9c7c-844af7eeb8a8",
+    "quantity": "18",
+    "vaultWalletId": "a3d393f3-66ab-4a4b-90da-901f1ec2182f",
+    "linkedAt": null,
+    "mintedAt": "2026-01-23T20:45:54.702Z",
+    "withdrawnAt": null,
+    "burnedAt": null,
+    "createdAt": "2026-01-23T20:42:27.599Z",
+    "updatedAt": "2026-01-23T20:45:54.703Z",
+    "publicContractAddress": "alca_eth_7t2g6u8k"
+  },
+  {
+    "id": "cea2ebfb-c9a9-4e61-ac81-5b9426d8a8c7",
+    "assetId": "61",
+    "status": "MINTED",
+    "tenantId": "023c9c2f-286c-42b3-9ffc-d0874413e6bf",
+    "createdBy": "2119",
+    "blockchain": "ETH_TEST5",
+    "tokenStandard": "ERC20",
+    "tokenAddress": "0x71Fc1B4c409E8d204BAA79379B88112c1d9BF1db",
+    "tokenId": "6aebec73-49fe-4409-bf46-4aca13a8fe31",
+    "quantity": "100",
+    "vaultWalletId": "2245a6f3-be1b-4897-a0c6-bb02414a143d",
+    "linkedAt": null,
+    "mintedAt": "2026-01-23T16:34:42.461Z",
+    "withdrawnAt": null,
+    "burnedAt": null,
+    "createdAt": "2026-01-23T16:31:46.831Z",
+    "updatedAt": "2026-01-23T16:34:42.462Z",
+    "publicContractAddress": "alca_eth_lrgs20q8"
+  },
+  {
+    "id": "3354efb2-8fd7-4995-b648-35faaebb29e7",
+    "assetId": "60",
+    "status": "MINTED",
+    "tenantId": "023c9c2f-286c-42b3-9ffc-d0874413e6bf",
+    "createdBy": "2119",
+    "blockchain": "ETH_TEST5",
+    "tokenStandard": "ERC20",
+    "tokenAddress": "0xFd39fbA873452A66C55F714dc144B269c8e2f09B",
+    "tokenId": "09c4a56c-4bb7-4f58-b09d-f536c1e6bd4e",
+    "quantity": "10",
+    "vaultWalletId": "edaf31c4-f149-44a9-97f8-fefac5bbccdd",
+    "linkedAt": null,
+    "mintedAt": "2026-01-23T14:29:42.485Z",
+    "withdrawnAt": null,
+    "burnedAt": null,
+    "createdAt": "2026-01-23T14:26:37.518Z",
+    "updatedAt": "2026-01-23T14:29:42.488Z",
+    "publicContractAddress": "alca_eth_ctelxmuh"
+  },
+  {
+    "id": "42d11864-2d77-4918-9c87-b70d5de7b0b6",
+    "assetId": "59",
+    "status": "MINTED",
+    "tenantId": "023c9c2f-286c-42b3-9ffc-d0874413e6bf",
+    "createdBy": "2119",
+    "blockchain": "ETH_TEST5",
+    "tokenStandard": "ERC20",
+    "tokenAddress": "0x9F183F433Af75E3Ed8a865B34DAAa06bBa0911BD",
+    "tokenId": "f75ae73a-e7f5-46c8-a830-fdadbe93f7a3",
+    "quantity": "19",
+    "vaultWalletId": "0093e5a3-dae3-44e2-bb30-4e346b369795",
+    "linkedAt": null,
+    "mintedAt": "2026-01-23T14:16:42.504Z",
+    "withdrawnAt": null,
+    "burnedAt": null,
+    "createdAt": "2026-01-23T14:11:33.337Z",
+    "updatedAt": "2026-01-23T14:16:42.510Z",
+    "publicContractAddress": "alca_eth_jcsu532b"
+  }
+]

@@ -7,6 +7,8 @@ export const OperationType = Object.freeze({
     MINT: 'MINT',
     TRANSFER: 'TRANSFER',
     BURN: 'BURN',
+    FREEZE: 'FREEZE',
+    UNFREEZE: 'UNFREEZE',
     UPDATE_VAULT: 'UPDATE_VAULT',
     LINK_ASSET: 'LINK_ASSET'
 });

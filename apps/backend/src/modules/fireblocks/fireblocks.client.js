@@ -449,7 +449,7 @@ export const issueToken = async (vaultId, tokenConfig) => {
 /**
  * Make manual Fireblocks API request
  */
-const makeFireblocksRequest = async (path, method, payload) => {
+export const makeFireblocksRequest = async (path, method, payload) => {
   const fs = await import('fs');
   const crypto = await import('crypto');
 

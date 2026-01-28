@@ -280,9 +280,63 @@ export const updateCustodyStatus = async (id, newStatus, metadata, actor, contex
         await auditService.logTokenTransferred(id, metadata, actor, context);
     } else if (newStatus === CustodyStatus.BURNED) {
         await auditService.logTokenBurned(id, metadata, actor, context);
+    } else if (newStatus === CustodyStatus.FROZEN) {
+        await auditService.logEvent('TOKEN_FROZEN', metadata, { ...context, custodyRecordId: id, actor });
     }
 
     return enrichCustodyRecord(updated);
+};
+
+/**
+ * Freeze token internally (MINTED -> FROZEN)
+ */
+export const freezeToken = async (id, actor, context = {}) => {
+    const custodyRecord = await custodyRepository.findById(id);
+    if (!custodyRecord) {
+        throw new NotFoundError('Custody record not found');
+    }
+
+    if (custodyRecord.status !== CustodyStatus.MINTED) {
+        throw new BadRequestError(`Cannot freeze token in status ${custodyRecord.status}. Must be MINTED.`);
+    }
+
+    const updated = await updateCustodyStatus(
+        id,
+        CustodyStatus.FROZEN,
+        { frozenAt: new Date(), frozenBy: actor },
+        actor,
+        context
+    );
+
+    logger.info('Token frozen internally', { custodyRecordId: id, actor });
+
+    return updated;
+};
+
+/**
+ * Unfreeze token internally (FROZEN -> MINTED)
+ */
+export const unfreezeToken = async (id, actor, context = {}) => {
+    const custodyRecord = await custodyRepository.findById(id);
+    if (!custodyRecord) {
+        throw new NotFoundError('Custody record not found');
+    }
+
+    if (custodyRecord.status !== CustodyStatus.FROZEN) {
+        throw new BadRequestError(`Cannot unfreeze token in status ${custodyRecord.status}. Must be FROZEN.`);
+    }
+
+    const updated = await updateCustodyStatus(
+        id,
+        CustodyStatus.MINTED,
+        { unfrozenAt: new Date(), unfrozenBy: actor },
+        actor,
+        context
+    );
+
+    logger.info('Token unfrozen internally', { custodyRecordId: id, actor });
+
+    return updated;
 };
 
 /**
@@ -344,6 +398,8 @@ export default {
     approveCustodyLink,
     rejectCustodyLink,
     updateCustodyStatus,
+    freezeToken,
+    unfreezeToken,
     listCustodyRecords,
     getStatistics,
     enrichCustodyRecord

@@ -5,6 +5,7 @@ import * as auditService from '../audit/audit.service.js';
 import * as custodyService from '../custody/custody.service.js';
 import * as fireblocksService from '../vault/fireblocks.service.js';
 import * as mintService from '../token-lifecycle/mint.service.js';
+import * as burnService from '../token-lifecycle/burn.service.js';
 import * as assetService from '../asset-linking/asset.service.js';
 import * as assetRepository from '../asset-linking/asset.repository.js';
 import { OperationStatus, canTransitionTo } from '../../enums/operationStatus.js';
@@ -151,6 +152,89 @@ export const initiateMintOperation = async (data, actor, context = {}) => {
     });
 
     return operation;
+};
+
+/**
+ * Initiate a burn operation (MAKER role)
+ */
+export const initiateBurnOperation = async (data, actor, context = {}) => {
+    const { assetId, amount } = data;
+
+    const custodyRecord = await custodyRepository.findByAssetId(assetId);
+    if (!custodyRecord) throw NotFoundError(`Asset ${assetId} not found`);
+    if (custodyRecord.status !== CustodyStatus.MINTED) {
+        throw BadRequestError(`Token must be in MINTED status to burn. Current: ${custodyRecord.status}`);
+    }
+
+    return await initiateOperation({
+        operationType: OperationType.BURN,
+        custodyRecordId: custodyRecord.id,
+        payload: { assetId, amount }
+    }, actor, context);
+};
+
+/**
+ * Initiate a freeze operation (MAKER role)
+ */
+export const initiateFreezeOperation = async (data, actor, context = {}) => {
+    const { assetId } = data;
+
+    const custodyRecord = await custodyRepository.findByAssetId(assetId);
+    if (!custodyRecord) throw NotFoundError(`Asset ${assetId} not found`);
+    if (custodyRecord.status !== CustodyStatus.MINTED) {
+        throw BadRequestError(`Token must be in MINTED status to freeze. Current: ${custodyRecord.status}`);
+    }
+
+    return await initiateOperation({
+        operationType: OperationType.FREEZE,
+        custodyRecordId: custodyRecord.id,
+        payload: { assetId }
+    }, actor, context);
+};
+
+/**
+ * Initiate an unfreeze operation (MAKER role)
+ */
+export const initiateUnfreezeOperation = async (data, actor, context = {}) => {
+    const { assetId } = data;
+
+    const custodyRecord = await custodyRepository.findByAssetId(assetId);
+    if (!custodyRecord) throw NotFoundError(`Asset ${assetId} not found`);
+    if (custodyRecord.status !== CustodyStatus.FROZEN) {
+        throw BadRequestError(`Token must be in FROZEN status to unfreeze. Current: ${custodyRecord.status}`);
+    }
+
+    return await initiateOperation({
+        operationType: OperationType.UNFREEZE,
+        custodyRecordId: custodyRecord.id,
+        payload: { assetId }
+    }, actor, context);
+};
+
+/**
+ * Direct execution for Admins (Initiate + Approve in one step)
+ */
+export const executeDirectOperation = async (data, actor, context = {}) => {
+    logger.info('Executing direct admin operation', { operationType: data.operationType, actor });
+
+    // 1. Initiate
+    let operation;
+    const { operationType } = data;
+
+    if (operationType === OperationType.MINT) {
+        operation = await initiateMintOperation(data, actor, context);
+    } else if (operationType === OperationType.BURN) {
+        operation = await initiateBurnOperation(data, actor, context);
+    } else if (operationType === OperationType.FREEZE) {
+        operation = await initiateFreezeOperation(data, actor, context);
+    } else if (operationType === OperationType.UNFREEZE) {
+        operation = await initiateUnfreezeOperation(data, actor, context);
+    } else {
+        operation = await initiateOperation(data, actor, context);
+    }
+
+    // 2. Approve (using skip flag to bypass maker-checker since this is an admin target)
+    return await approveOperation(operation.id, actor, context, true);
 };
 
 /**
@@ -373,6 +457,36 @@ export const executeOperation = async (operationId, actor, context = {}) => {
             return await operationRepository.updateStatus(operationId, OperationStatus.EXECUTED, {
                 executedAt: new Date()
             });
+        } else if (operation.operationType === OperationType.BURN) {
+            const { amount } = operation.payload;
+            const result = await burnService.burnToken({
+                custodyRecordId: operation.custodyRecordId,
+                amount
+            }, actor, context);
+
+            // Return early - monitorBurnTransaction is handling the status update to EXECUTED/FAILED
+            // We update status to EXECUTING here to signal submission
+            const executingOp = await operationRepository.updateStatus(operationId, 'EXECUTING', {
+                fireblocksTaskId: result.fireblocksTxId,
+                fireblocksStatus: result.status || 'SUBMITTED'
+            });
+
+            logger.info('Burn operation submitted to Fireblocks and monitoring started', { operationId, fireblocksTxId: result.fireblocksTxId });
+            return executingOp;
+        } else if (operation.operationType === OperationType.FREEZE) {
+            await custodyService.freezeToken(operation.custodyRecordId, actor, context);
+            const updated = await operationRepository.updateStatus(operationId, OperationStatus.EXECUTED, {
+                executedAt: new Date()
+            });
+            webhookService.notifyStatusUpdate('operation.updated', updated);
+            return updated;
+        } else if (operation.operationType === OperationType.UNFREEZE) {
+            const updated = await custodyService.unfreezeToken(operation.custodyRecordId, actor, context);
+            const opUpdated = await operationRepository.updateStatus(operationId, OperationStatus.EXECUTED, {
+                executedAt: new Date()
+            });
+            webhookService.notifyStatusUpdate('operation.updated', opUpdated);
+            return opUpdated;
         }
 
         // Update status to EXECUTED (or SUBMITTED/PENDING if we want to monitor)
@@ -382,6 +496,9 @@ export const executeOperation = async (operationId, actor, context = {}) => {
             fireblocksTaskId,
             executedAt: new Date()
         });
+
+        // Notify subscribers about execution
+        webhookService.notifyStatusUpdate('operation.updated', updated);
 
         // Log audit event
         await auditService.logOperationExecuted(operationId, 'PENDING_ON_CHAIN', context);
@@ -393,9 +510,10 @@ export const executeOperation = async (operationId, actor, context = {}) => {
         logger.error('Fireblocks execution failed', { operationId, error: error.message });
         const errorMessage = error.message.includes('ENOENT') ? 'Fireblocks Secret Key Missing' : error.message;
         await auditService.logOperationFailed(operationId, { message: errorMessage }, context);
-        await operationRepository.updateStatus(operationId, OperationStatus.FAILED, {
+        const updated = await operationRepository.updateStatus(operationId, OperationStatus.FAILED, {
             failureReason: errorMessage
         });
+        webhookService.notifyStatusUpdate('operation.updated', updated);
         throw error;
     }
 };
@@ -420,8 +538,11 @@ export const getOperationDetails = async (id) => {
 };
 
 export default {
-    initiateOperation,
     initiateMintOperation,
+    initiateBurnOperation,
+    initiateFreezeOperation,
+    initiateUnfreezeOperation,
+    executeDirectOperation,
     approveOperation,
     rejectOperation,
     executeOperation,

@@ -1,7 +1,3 @@
-// This is your Prisma schema file for AssetLink Custody
-// Database: MySQL
-// Core tables: CustodyRecord, CustodyOperation, AuditLog, ApiKey, VaultWallet
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,238 +7,182 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// API Authentication
 model ApiKey {
   id            String   @id @default(uuid())
   publicKey     String   @unique
-  secretKeyHash String   // HMAC secret (hashed)
-  secretKey     String?  // Plain secret key for HMAC verification (stored temporarily/dev)
+  secretKeyHash String
   tenantId      String?
-  userId        String?
-  user          User?    @relation(fields: [userId], references: [id])
-  role          String   @default("MAKER") // MAKER, CHECKER, VIEWER
-  permissions   Json     // Scoped permissions array
-  ipWhitelist   Json?    // Optional IP restrictions
+  permissions   Json
+  ipWhitelist   Json?
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  userId        String?
+  role          String   @default("MAKER")
+  secretKey     String?
+  user          User?    @relation(fields: [userId], references: [id])
 
   @@index([publicKey])
   @@index([userId])
   @@map("api_keys")
 }
 
-// User Accounts
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  passwordHash  String
-  role          String   @default("CLIENT") // CLIENT, ADMIN
-  status        String   @default("ACTIVE") // ACTIVE, SUSPENDED
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String       @id @default(uuid())
+  email        String       @unique
+  passwordHash String
+  role         String       @default("CLIENT")
+  status       String       @default("ACTIVE")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  apiKeys      ApiKey[]
+  balance      UserBalance?
 
-  // Relations
-  apiKeys          ApiKey[]
-  balance          UserBalance?
-  
   @@map("users")
 }
 
-// Fireblocks Vault Metadata
 model VaultWallet {
-  id              String   @id @default(uuid())
-  fireblocksId    String   // Fireblocks vault ID (not unique - one vault has multiple wallets)
-  blockchain      String?  // ETH, MATIC, etc. (null for empty vaults)
-  address         String?  // Wallet address for this blockchain
-  vaultType       String   // CUSTODY, SETTLEMENT
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  custodyRecords  CustodyRecord[]
-  operations      CustodyOperation[]
+  id             String             @id @default(uuid())
+  fireblocksId   String
+  blockchain     String?
+  vaultType      String
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  address        String?
+  operations     CustodyOperation[]
+  custodyRecords CustodyRecord[]
 
   @@unique([fireblocksId, blockchain])
   @@index([fireblocksId])
   @@map("vault_wallets")
 }
 
-// Core Custody Record (Asset-to-Token Immutable Mapping)
 model CustodyRecord {
-  id                String   @id @default(uuid())
-  assetId           String   @unique // External asset identifier (immutable)
-  status            String   // UNLINKED, LINKED, MINTED, WITHDRAWN, BURNED
-  
-  // Two-level isolation
-  tenantId          String   // Platform owner (from API key)
-  createdBy         String   // End user who created this record
-  
-  // Token metadata (populated after minting)
-  blockchain        String?
-  tokenStandard     String?  // ERC721, ERC1155
-  tokenAddress      String?
-  tokenId           String?
-  quantity          String?  // Decimal string for precision
-  
-  // Vault reference
-  vaultWalletId     String?
-  vaultWallet       VaultWallet? @relation(fields: [vaultWalletId], references: [id])
-  
-  // Timestamps
-  linkedAt          DateTime?
-  mintedAt          DateTime?
-  withdrawnAt       DateTime?
-  burnedAt          DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  operations        CustodyOperation[]
-  auditLogs         AuditLog[]
-  assetMetadata     AssetMetadata?
-  listings          Listing[]
-  ownerships        Ownership[]
-
-  // Explorer identifiers
-  publicContractAddress String?  @unique // alca_<chain>_<short-hash>
+  id                    String             @id @default(uuid())
+  assetId               String             @unique
+  status                String
+  blockchain            String?
+  tokenStandard         String?
+  tokenAddress          String?
+  tokenId               String?
+  quantity              String?
+  vaultWalletId         String?
+  linkedAt              DateTime?
+  mintedAt              DateTime?
+  withdrawnAt           DateTime?
+  burnedAt              DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  createdBy             String
+  tenantId              String
+  publicContractAddress String?            @unique
+  assetMetadata         AssetMetadata?
+  auditLogs             AuditLog[]
+  operations            CustodyOperation[]
+  vaultWallet           VaultWallet?       @relation(fields: [vaultWalletId], references: [id])
+  listings              Listing[]
+  ownerships            Ownership[]
 
   @@index([assetId])
   @@index([tenantId])
   @@index([createdBy])
   @@index([status])
+  @@index([vaultWalletId], map: "custody_records_vaultWalletId_fkey")
   @@map("custody_records")
 }
 
-// Asset Metadata (Detailed Asset Information)
 model AssetMetadata {
-  id                String   @id @default(uuid())
-  custodyRecordId   String   @unique
-  custodyRecord     CustodyRecord @relation(fields: [custodyRecordId], references: [id])
-  
-  // Asset Information
-  assetType         String   // WATCH, JEWELRY, ART, REAL_ESTATE, etc.
+  id                String        @id @default(uuid())
+  custodyRecordId   String        @unique
+  assetType         String
   assetName         String
-  description       String?  @db.Text
+  description       String?       @db.Text
   manufacturer      String?
   model             String?
   serialNumber      String?
   yearManufactured  Int?
-  
-  // Valuation
-  estimatedValue    String   // Existing field (default to USD)
-  estimatedValueUsd String?  // New USD field
-  estimatedValueEth String?  // New ETH field
-  currency          String   @default("USD")
+  estimatedValue    String
+  currency          String        @default("USD")
   valuationDate     DateTime?
   valuationMethod   String?
-  
-  // Verification
   verifiedBy        String?
   verificationDate  DateTime?
-  verificationNotes String?  @db.Text
-  
-  // Documents and Images
-  documents         Json     // Array of document references
-  images            Json     // Array of image URLs
-  assetFiles        AssetFile[]
-  
-  // Storage and Custody
-  storageType       String?  // Issuer Custody, Platform Custody, etc.
-  
-  // Custom metadata
+  verificationNotes String?       @db.Text
+  documents         Json
+  images            Json
   customFields      Json?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  storageType       String?
+  estimatedValueEth String?
+  estimatedValueUsd String?
+  assetFiles        AssetFile[]
+  custodyRecord     CustodyRecord @relation(fields: [custodyRecordId], references: [id])
 
   @@index([assetType])
   @@index([custodyRecordId])
   @@map("asset_metadata")
 }
 
-// Asset Files (Detailed File Tracking)
 model AssetFile {
-  id                String   @id @default(uuid())
-  assetMetadataId   String
-  assetMetadata     AssetMetadata @relation(fields: [assetMetadataId], references: [id])
-  fileType          String   // OWNERSHIP, IMAGE, VIDEO
-  filePath          String
-  mimeType          String?
-  uploadedAt        DateTime @default(now())
+  id              String        @id @default(uuid())
+  assetMetadataId String
+  fileType        String
+  filePath        String
+  mimeType        String?
+  uploadedAt      DateTime      @default(now())
+  assetMetadata   AssetMetadata @relation(fields: [assetMetadataId], references: [id])
 
   @@index([assetMetadataId])
   @@map("asset_files")
 }
 
-// Maker-Checker Operations
 model CustodyOperation {
-  id                  String   @id @default(uuid())
-  operationType       String   // MINT, TRANSFER, BURN
-  status              String   // PENDING_MAKER, PENDING_CHECKER, APPROVED, EXECUTED, REJECTED, FAILED
-  
-  // References
-  custodyRecordId     String?
-  custodyRecord       CustodyRecord? @relation(fields: [custodyRecordId], references: [id])
-  
-  vaultWalletId       String?
-  vaultWallet         VaultWallet? @relation(fields: [vaultWalletId], references: [id])
-  
-  // Operation payload
-  payload             Json     // Operation-specific data
-  
-  // Approval tracking
-  initiatedBy         String   // Maker user ID
-  approvedBy          String?  // Checker user ID
-  rejectedBy          String?
-  rejectionReason     String?  @db.Text
-  
-  // Execution tracking
-  fireblocksTaskId    String?  @unique
-  fireblocksStatus    String?  // status from Fireblocks (SUBMITTED, BROADCASTING, etc.)
-  txHash              String?
-  executedAt          DateTime?
-  failureReason       String?  @db.Text
-  
-  // Idempotency
-  idempotencyKey      String?  @unique
-  
-  // Explorer identifier
-  offchainTxHash      String?  @unique // altx_<sha256_hash>
-
-  // Timestamps
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  auditLogs           AuditLog[]
+  id               String         @id @default(uuid())
+  operationType    String
+  status           String
+  custodyRecordId  String?
+  vaultWalletId    String?
+  payload          Json
+  initiatedBy      String
+  approvedBy       String?
+  rejectedBy       String?
+  rejectionReason  String?        @db.Text
+  fireblocksTaskId String?        @unique
+  txHash           String?
+  executedAt       DateTime?
+  failureReason    String?        @db.Text
+  idempotencyKey   String?        @unique
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  offchainTxHash   String?        @unique
+  fireblocksStatus String?
+  auditLogs        AuditLog[]
+  custodyRecord    CustodyRecord? @relation(fields: [custodyRecordId], references: [id])
+  vaultWallet      VaultWallet?   @relation(fields: [vaultWalletId], references: [id])
 
   @@index([custodyRecordId])
   @@index([status])
   @@index([operationType])
   @@index([fireblocksTaskId])
   @@index([offchainTxHash])
+  @@index([vaultWalletId], map: "custody_operations_vaultWalletId_fkey")
   @@map("custody_operations")
 }
 
-// Append-Only Audit Trail
 model AuditLog {
-  id                  String   @id @default(uuid())
-  
-  // References
-  custodyRecordId     String?
-  custodyRecord       CustodyRecord? @relation(fields: [custodyRecordId], references: [id])
-  
-  operationId         String?
-  operation           CustodyOperation? @relation(fields: [operationId], references: [id])
-  
-  // Event details
-  eventType           String   // ASSET_LINKED, TOKEN_MINTED, TRANSFER_EXECUTED, etc.
-  actor               String   // User/system that triggered the event
-  metadata            Json     // Event-specific data
-  ipAddress           String?
-  userAgent           String?  @db.Text
-  
-  // Timestamp (immutable)
-  timestamp           DateTime @default(now())
+  id              String            @id @default(uuid())
+  custodyRecordId String?
+  operationId     String?
+  eventType       String
+  actor           String
+  metadata        Json
+  ipAddress       String?
+  userAgent       String?           @db.Text
+  timestamp       DateTime          @default(now())
+  custodyRecord   CustodyRecord?    @relation(fields: [custodyRecordId], references: [id])
+  operation       CustodyOperation? @relation(fields: [operationId], references: [id])
 
   @@index([custodyRecordId])
   @@index([operationId])
@@ -251,56 +191,45 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-// Marketplace Listing
 model Listing {
-  id                String   @id @default(uuid())
-  assetId           String
-  custodyRecordId   String
-  custodyRecord     CustodyRecord @relation(fields: [custodyRecordId], references: [id])
-  
-  // Two-level isolation
-  tenantId          String   // Platform owner
-  sellerId          String   // End user (issuer)
-  
-  price             String   // Existing field (default to USD)
-  priceUsd          String?  // New USD price
-  priceEth          String?  // New ETH price
-  currency          String   @default("USD")
-  quantityListed    String   // Total quantity listed
-  quantitySold      String   @default("0") // Quantity sold
-  
-  status            String   // ACTIVE, SOLD, CANCELLED, EXPIRED
-  
-  expiryDate        DateTime
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  bids              Bid[]
+  id              String        @id @default(uuid())
+  assetId         String
+  custodyRecordId String
+  sellerId        String
+  price           String
+  currency        String        @default("USD")
+  status          String
+  expiryDate      DateTime
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  quantityListed  String
+  quantitySold    String        @default("0")
+  tenantId        String
+  priceEth        String?
+  priceUsd        String?
+  bids            Bid[]
+  custodyRecord   CustodyRecord @relation(fields: [custodyRecordId], references: [id])
 
   @@index([assetId])
   @@index([tenantId])
   @@index([sellerId])
   @@index([status])
   @@index([expiryDate])
+  @@index([custodyRecordId], map: "listings_custodyRecordId_fkey")
   @@map("listings")
 }
 
-// Marketplace Bid
 model Bid {
-  id                String   @id @default(uuid())
-  listingId         String
-  listing           Listing  @relation(fields: [listingId], references: [id])
-  
-  // Two-level isolation
-  tenantId          String   // Platform owner
-  buyerId           String   // End user (investor)
-  
-  amount            String   // Decimal string for precision
-  quantity          String   // Quantity of tokens
-  status            String   // PENDING, ACCEPTED, REJECTED
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id        String   @id @default(uuid())
+  listingId String
+  buyerId   String
+  amount    String
+  status    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  quantity  String
+  tenantId  String
+  listing   Listing  @relation(fields: [listingId], references: [id])
 
   @@index([listingId])
   @@index([tenantId])
@@ -309,46 +238,39 @@ model Bid {
   @@map("bids")
 }
 
-// Off-Chain Ownership Ledger
 model Ownership {
-  id                String   @id @default(uuid())
-  assetId           String
-  custodyRecordId   String
-  custodyRecord     CustodyRecord @relation(fields: [custodyRecordId], references: [id])
-  
-  // Two-level isolation
-  tenantId          String   // Platform owner
-  ownerId           String   // End user (investor)
-  
-  quantity          String   // Decimal string for precision
-  purchasePrice     String?  // Existing field (default to USD)
-  purchasePriceUsd  String?  // New USD purchase price
-  purchasePriceEth  String?  // New ETH purchase price
-  currency          String   @default("USD")
-  walletAddress     String?  // Investor's wallet address for off-chain tracking
-  
-  acquiredAt        DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String        @id @default(uuid())
+  assetId          String
+  custodyRecordId  String
+  ownerId          String
+  quantity         String
+  acquiredAt       DateTime      @default(now())
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  currency         String        @default("USD")
+  purchasePrice    String?
+  tenantId         String
+  purchasePriceEth String?
+  purchasePriceUsd String?
+  walletAddress    String?
+  custodyRecord    CustodyRecord @relation(fields: [custodyRecordId], references: [id])
 
   @@unique([assetId, ownerId])
   @@index([assetId])
   @@index([tenantId])
   @@index([ownerId])
+  @@index([custodyRecordId], map: "ownerships_custodyRecordId_fkey")
   @@map("ownerships")
 }
 
-// User Account Balances (for marketplace settlement)
 model UserBalance {
-  id                String   @id @default(uuid())
-  userId            String   @unique
-  user              User     @relation(fields: [userId], references: [id])
-  
-  balance           String   // Decimal string for precision
-  currency          String   @default("USD")
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  balance   String
+  currency  String   @default("USD")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@map("user_balances")

@@ -51,6 +51,114 @@ export const initiateMintOperation = async (req, res, next) => {
 };
 
 /**
+ * Initiate burn operation
+ * POST /v1/operations/burn
+ */
+export const initiateBurnOperation = async (req, res, next) => {
+    try {
+        const { assetId, amount } = req.body;
+        const operation = await operationService.initiateBurnOperation(
+            { assetId, amount },
+            req.auth?.publicKey || 'anonymous',
+            { ipAddress: req.ip, userAgent: req.get('user-agent') }
+        );
+        res.status(201).json(operation);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Initiate freeze operation
+ * POST /v1/operations/freeze
+ */
+export const initiateFreezeOperation = async (req, res, next) => {
+    try {
+        const { assetId } = req.body;
+        const operation = await operationService.initiateFreezeOperation(
+            { assetId },
+            req.auth?.publicKey || 'anonymous',
+            { ipAddress: req.ip, userAgent: req.get('user-agent') }
+        );
+        res.status(201).json(operation);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Direct Burn (Admin)
+ * POST /v1/operations/admin/burn
+ */
+export const directBurnOperation = async (req, res, next) => {
+    try {
+        const { assetId, amount } = req.body;
+        const result = await operationService.executeDirectOperation(
+            { assetId, amount, operationType: 'BURN' },
+            req.auth?.publicKey || 'admin',
+            { ipAddress: req.ip, userAgent: req.get('user-agent') }
+        );
+        res.status(201).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Direct Freeze (Admin)
+ * POST /v1/operations/admin/freeze
+ */
+export const directFreezeOperation = async (req, res, next) => {
+    try {
+        const { assetId } = req.body;
+        const result = await operationService.executeDirectOperation(
+            { assetId, operationType: 'FREEZE' },
+            req.auth?.publicKey || 'admin',
+            { ipAddress: req.ip, userAgent: req.get('user-agent') }
+        );
+        res.status(201).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Direct Unfreeze (Admin)
+ * POST /v1/operations/admin/unfreeze
+ */
+export const directUnfreezeOperation = async (req, res, next) => {
+    try {
+        const { assetId } = req.body;
+        const result = await operationService.executeDirectOperation(
+            { assetId, operationType: 'UNFREEZE' },
+            req.auth?.publicKey || 'admin',
+            { ipAddress: req.ip, userAgent: req.get('user-agent') }
+        );
+        res.status(201).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Initiate unfreeze operation
+ * POST /v1/operations/unfreeze
+ */
+export const initiateUnfreezeOperation = async (req, res, next) => {
+    try {
+        const { assetId } = req.body;
+        const operation = await operationService.initiateUnfreezeOperation(
+            { assetId },
+            req.auth?.publicKey || 'anonymous',
+            { ipAddress: req.ip, userAgent: req.get('user-agent') }
+        );
+        res.status(201).json(operation);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * Approve operation
  * POST /v1/operations/:id/approve
  */
@@ -128,14 +236,7 @@ export const getOperationDetails = async (req, res, next) => {
     }
 };
 
-export default {
-    initiateOperation,
-    initiateMintOperation,
-    approveOperation,
-    rejectOperation,
-    listOperations,
-    getOperationDetails
-};
+
 
 /**
  * DASHBOARD ENDPOINTS (JWT Authentication)
@@ -151,19 +252,57 @@ export const initiateMintOperationDashboard = async (req, res, next) => {
         const userId = req.user.sub;
 
         const operation = await operationService.initiateMintOperation(
-            { 
-                assetId, 
-                tokenSymbol, 
-                tokenName, 
-                totalSupply, 
-                decimals, 
+            {
+                assetId,
+                tokenSymbol,
+                tokenName,
+                totalSupply,
+                decimals,
                 blockchainId: blockchain || 'ETH_TEST5',
-                vaultWalletId 
+                vaultWalletId
             },
             `dashboard_user_${userId}`,
             { ipAddress: req.ip, userAgent: req.get('user-agent') }
         );
 
+        res.status(201).json(operation);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Initiate burn operation from dashboard
+ * POST /v1/operations/dashboard/burn
+ */
+export const initiateBurnOperationDashboard = async (req, res, next) => {
+    try {
+        const { assetId, amount } = req.body;
+        const userId = req.user.sub;
+        const operation = await operationService.initiateBurnOperation(
+            { assetId, amount },
+            `dashboard_user_${userId}`,
+            { ipAddress: req.ip, userAgent: req.get('user-agent') }
+        );
+        res.status(201).json(operation);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Initiate freeze operation from dashboard
+ * POST /v1/operations/dashboard/freeze
+ */
+export const initiateFreezeOperationDashboard = async (req, res, next) => {
+    try {
+        const { assetId } = req.body;
+        const userId = req.user.sub;
+        const operation = await operationService.initiateFreezeOperation(
+            { assetId },
+            `dashboard_user_${userId}`,
+            { ipAddress: req.ip, userAgent: req.get('user-agent') }
+        );
         res.status(201).json(operation);
     } catch (error) {
         next(error);
@@ -236,4 +375,45 @@ export const rejectOperationDashboard = async (req, res, next) => {
     } catch (error) {
         next(error);
     }
+};
+
+/**
+ * Initiate unfreeze operation from dashboard
+ * POST /v1/operations/dashboard/unfreeze
+ */
+export const initiateUnfreezeOperationDashboard = async (req, res, next) => {
+    try {
+        const { assetId } = req.body;
+        const userId = req.user.sub;
+        const operation = await operationService.initiateUnfreezeOperation(
+            { assetId },
+            `dashboard_user_${userId}`,
+            { ipAddress: req.ip, userAgent: req.get('user-agent') }
+        );
+        res.status(201).json(operation);
+    } catch (error) {
+        next(error);
+    }
+};
+
+export default {
+    initiateOperation,
+    initiateMintOperation,
+    initiateBurnOperation,
+    initiateFreezeOperation,
+    initiateUnfreezeOperation,
+    directBurnOperation,
+    directFreezeOperation,
+    directUnfreezeOperation,
+    approveOperation,
+    rejectOperation,
+    listOperations,
+    getOperationDetails,
+    initiateMintOperationDashboard,
+    initiateBurnOperationDashboard,
+    initiateFreezeOperationDashboard,
+    initiateUnfreezeOperationDashboard,
+    listOperationsDashboard,
+    approveOperationDashboard,
+    rejectOperationDashboard
 };

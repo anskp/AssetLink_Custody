@@ -23,6 +23,11 @@ router.post('/dashboard/:id/approve', authenticateJwt, operationController.appro
 // Reject operation from dashboard
 router.post('/dashboard/:id/reject', authenticateJwt, operationController.rejectOperationDashboard);
 
+// Burn & Freeze from dashboard
+router.post('/dashboard/burn', authenticateJwt, operationController.initiateBurnOperationDashboard);
+router.post('/dashboard/freeze', authenticateJwt, operationController.initiateFreezeOperationDashboard);
+router.post('/dashboard/unfreeze', authenticateJwt, operationController.initiateUnfreezeOperationDashboard);
+
 // List operations from dashboard
 router.get('/dashboard', authenticateJwt, operationController.listOperationsDashboard);
 
@@ -37,6 +42,14 @@ router.get('/:id', authenticate, requirePermission('read'), operationController.
 // Initiate (Write permission - Maker role)
 router.post('/', authenticate, requirePermission('write'), operationController.initiateOperation);
 router.post('/mint', authenticate, requirePermission('write'), operationController.initiateMintOperation);
+router.post('/burn', authenticate, requirePermission('write'), operationController.initiateBurnOperation);
+router.post('/freeze', authenticate, requirePermission('write'), operationController.initiateFreezeOperation);
+router.post('/unfreeze', authenticate, requirePermission('write'), operationController.initiateUnfreezeOperation);
+
+// Direct Actions (Admin permission - Checker role)
+router.post('/admin/burn', authenticate, requirePermission('admin'), operationController.directBurnOperation);
+router.post('/admin/freeze', authenticate, requirePermission('admin'), operationController.directFreezeOperation);
+router.post('/admin/unfreeze', authenticate, requirePermission('admin'), operationController.directUnfreezeOperation);
 
 // Approve/Reject (Admin permission - Checker role)
 router.post('/:id/approve', authenticate, requirePermission('admin'), operationController.approveOperation);
