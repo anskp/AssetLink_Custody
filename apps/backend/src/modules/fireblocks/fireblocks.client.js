@@ -598,9 +598,6 @@ export const getTokenizationStatus = async (tokenLinkId) => {
         txHash: linkedToken.txHash,
         fullResponse: JSON.stringify(linkedToken, null, 2)
       });
-
-      // Also console.log for immediate visibility in terminal
-      // Detailed logging via logger instead of console
       logger.error('Token minting failed details', { fullResponse: linkedToken });
     }
 
@@ -611,7 +608,8 @@ export const getTokenizationStatus = async (tokenLinkId) => {
       txHash: linkedToken.txHash,
       tokenMetadata: linkedToken.tokenMetadata,
       substatus: linkedToken.substatus,
-      errorMessage: linkedToken.errorMessage
+      errorMessage: linkedToken.errorMessage,
+      contractAddress: linkedToken.tokenMetadata?.contractAddress || linkedToken.contractAddress
     };
   } catch (error) {
     logger.error('Failed to get tokenization status', {
@@ -653,6 +651,88 @@ export const mintTokens = async (tokenId, vaultAccountId, amount) => {
   }
 };
 
+/**
+ * Deploy a contract using Fireblocks CONTRACT_CALL
+ */
+export const deployContract = async (vaultId, bytecode, constructorArgs, blockchainId = 'ETH_TEST5') => {
+  if (!isConfigured()) {
+    logger.warn('SIMULATION: Deploying mock contract');
+    return {
+      id: `mock_deploy_${Date.now()}`,
+      status: 'SUBMITTED'
+    };
+  }
+
+  // Combine bytecode and encoded constructor args
+  const contractCallData = constructorArgs ? bytecode + constructorArgs.replace('0x', '') : bytecode;
+
+  const body = {
+    assetId: blockchainId,
+    source: { type: 'VAULT_ACCOUNT', id: vaultId },
+    destination: {
+      type: 'ONE_TIME_ADDRESS',
+      oneTimeAddress: { address: '0x0000000000000000000000000000000000000000' }
+    },
+    amount: '0',
+    operation: 'CONTRACT_CALL',
+    extraParameters: { contractCallData }
+  };
+
+  const result = await makeFireblocksRequest('/v1/transactions', 'POST', body);
+  return result;
+};
+
+/**
+ * Call a contract function using Fireblocks CONTRACT_CALL
+ */
+export const callContract = async (vaultId, contractAddress, data, blockchainId = 'ETH_TEST5', note = '') => {
+  if (!isConfigured()) {
+    logger.warn('SIMULATION: Mock contract call');
+    return {
+      id: `mock_call_${Date.now()}`,
+      status: 'SUBMITTED'
+    };
+  }
+
+  const body = {
+    assetId: blockchainId,
+    source: { type: 'VAULT_ACCOUNT', id: vaultId },
+    destination: {
+      type: 'ONE_TIME_ADDRESS',
+      oneTimeAddress: { address: contractAddress }
+    },
+    amount: '0',
+    operation: 'CONTRACT_CALL',
+    note,
+    extraParameters: { contractCallData: data }
+  };
+
+  const result = await makeFireblocksRequest('/v1/transactions', 'POST', body);
+  return result;
+};
+
+/**
+ * Wait for contract address from a transaction
+ */
+export const waitForContractAddress = async (txId, maxAttempts = 20) => {
+  let attempts = 0;
+  while (attempts < maxAttempts) {
+    attempts++;
+    const tx = await getTransactionById(txId);
+
+    if (tx.status === 'COMPLETED') {
+      // Fireblocks contractAddress can be in the root or extraParameters
+      return tx.contractAddress || tx.extraParameters?.contractAddress;
+    }
+
+    if (['FAILED', 'CANCELLED', 'REJECTED', 'BLOCKED'].includes(tx.status)) {
+      throw new Error(`Transaction ${txId} failed with status: ${tx.status}`);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+  throw new Error(`Timed out waiting for contract address for TX ${txId}`);
+};
 
 /**
  * Get transaction details by ID

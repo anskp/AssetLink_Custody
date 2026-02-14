@@ -20,7 +20,14 @@ POST /v1/custody/link
 **Request Body:**
 ```json
 {
-  "assetId": "ROLEX-2025-001"
+  "assetId": "ROLEX-2025-001",
+  "assetName": "Rolex Submariner",
+  "initialNav": "15000.00",
+  "initialPor": "20000.00",
+  "customFields": {
+    "symbol": "RLX-SUB",
+    "serial": "SN-12345"
+  }
 }
 ```
 
@@ -46,6 +53,56 @@ POST /v1/custody/link
 - 201: Asset linked successfully
 - 400: Invalid request
 - 409: Asset already linked
+
+---
+
+### Approve Custody Link
+```
+POST /v1/custody/:id/approve
+```
+
+**Description:** Approves a pending link and triggers automated contract orchestration (Vaults, Oracles, Token Proxy).
+
+**Headers:**
+- X-API-KEY: `{CHECKER_PUBLIC_KEY}`
+- X-SIGNATURE: `hmac_signature`
+- X-TIMESTAMP: `unix_timestamp`
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "status": "PENDING",
+  "message": "Orchestration initiated"
+}
+```
+
+---
+
+### Update Oracle Value
+```
+POST /v1/custody/:id/oracle
+```
+
+**Description:** Updates the value of a deployed NAV or PoR oracle.
+
+**Request Body:**
+```json
+{
+  "type": "NAV",
+  "value": "15500.00"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "txId": "fireblocks_tx_id",
+  "type": "NAV",
+  "newValue": "15500.00"
+}
+```
 
 ---
 
@@ -188,6 +245,11 @@ UNLINKED → LINKED → MINTED → WITHDRAWN/BURNED
 | tokenId | String | Token ID on blockchain |
 | quantity | String | Token quantity (decimal string) |
 | vaultWalletId | UUID | Reference to vault wallet |
+| navOracleAddress | String | Address of the NAV Oracle contract |
+| porOracleAddress | String | Address of the PoR Oracle contract |
+| initialNav | String | Starting value for NAV |
+| initialPor | String | Starting value for PoR |
+| errorMessage | String | Error details if orchestration or minting fails |
 | linkedAt | DateTime | When asset was linked |
 | mintedAt | DateTime | When token was minted |
 | withdrawnAt | DateTime | When token was withdrawn |

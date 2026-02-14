@@ -29,7 +29,9 @@ export const createAssetMetadata = async (custodyRecordId, data) => {
         images = [],
         customFields,
         storageType,
-        files = []
+        files = [],
+        initialNav,
+        initialPor
     } = data;
 
     // Auto-calculate ETH if only USD is provided
@@ -60,6 +62,8 @@ export const createAssetMetadata = async (custodyRecordId, data) => {
             images,
             customFields,
             storageType,
+            initialNav,
+            initialPor,
             assetFiles: files.length > 0 ? {
                 create: files.map(f => ({
                     fileType: f.fileType,
@@ -129,6 +133,8 @@ export const updateAssetMetadata = async (custodyRecordId, data) => {
     if (data.images !== undefined) updateData.images = data.images;
     if (data.customFields !== undefined) updateData.customFields = data.customFields;
     if (data.storageType !== undefined) updateData.storageType = data.storageType;
+    if (data.initialNav !== undefined) updateData.initialNav = data.initialNav;
+    if (data.initialPor !== undefined) updateData.initialPor = data.initialPor;
 
     // Handle files update if provided
     if (data.files && data.files.length > 0) {

@@ -81,6 +81,11 @@ model CustodyRecord {
   auditLogs             AuditLog[]
   operations            CustodyOperation[]
   vaultWallet           VaultWallet?       @relation(fields: [vaultWalletId], references: [id])
+  errorMessage          String?
+  navOracleAddress      String?
+  porOracleAddress      String?
+  initialNav            String?
+  initialPor            String?
   listings              Listing[]
   ownerships            Ownership[]
 
@@ -117,6 +122,8 @@ model AssetMetadata {
   storageType       String?
   estimatedValueEth String?
   estimatedValueUsd String?
+  initialNav        String?
+  initialPor        String?
   assetFiles        AssetFile[]
   custodyRecord     CustodyRecord @relation(fields: [custodyRecordId], references: [id])
 

@@ -13,7 +13,8 @@ import { CustodyStatus } from '../../enums/custodyStatus.js';
  * @param {string} createdBy - End user who created the asset
  * @param {string} status - Initial status
  */
-export const createCustodyRecord = async (assetId, tenantId, createdBy, status = CustodyStatus.LINKED, publicContractAddress = null) => {
+export const createCustodyRecord = async (assetId, tenantId, createdBy, status = CustodyStatus.LINKED, publicContractAddress = null, extra = {}) => {
+    const { initialNav, initialPor } = extra;
     return await prisma.custodyRecord.create({
         data: {
             assetId: String(assetId),
@@ -21,6 +22,8 @@ export const createCustodyRecord = async (assetId, tenantId, createdBy, status =
             createdBy,
             status,
             publicContractAddress,
+            initialNav,
+            initialPor,
             linkedAt: status === CustodyStatus.LINKED ? new Date() : null
         }
     });
@@ -79,6 +82,7 @@ export const updateStatus = async (id, newStatus, metadata = {}) => {
 
     // Update vaultWalletId regardless of status if provided in metadata
     if (metadata.vaultWalletId) updateData.vaultWalletId = metadata.vaultWalletId;
+    if (metadata.errorMessage) updateData.errorMessage = metadata.errorMessage;
 
     return await prisma.custodyRecord.update({
         where: { id },

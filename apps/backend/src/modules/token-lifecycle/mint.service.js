@@ -9,6 +9,8 @@ import * as custodyService from '../custody/custody.service.js';
 import * as custodyRepository from '../custody/custody.repository.js';
 import * as auditService from '../audit/audit.service.js';
 import { CustodyStatus } from '../../enums/custodyStatus.js';
+import { RWA_ORACLE, FIREBLOCKS_PROXY, UNIQUE_ASSET_TOKEN, UAT_IMPLEMENTATION_ADDRESS } from '../fireblocks/contracts.js';
+import { ethers } from 'ethers';
 import { NotFoundError, BadRequestError } from '../../errors/ApiError.js';
 import { mapToFireblocksAsset } from '../../utils/blockchain.js';
 import logger from '../../utils/logger.js';
@@ -150,7 +152,32 @@ export const mintToken = async (mintData, actor, context = {}) => {
     let result;
     const existingTokenId = custodyRecord.tokenId;
 
-    if (existingTokenId) {
+    if (custodyRecord.tokenStandard === 'ERC20F' && custodyRecord.tokenAddress) {
+      logger.info('Detected RWA ERC20F token, minting via contract call', {
+        assetId,
+        tokenAddress: custodyRecord.tokenAddress
+      });
+
+      const uatInterface = new ethers.Interface(UNIQUE_ASSET_TOKEN.abi);
+      const mintDataBytes = uatInterface.encodeFunctionData("mint", [
+        // Mint to the vault's own address
+        custodyRecord.vaultWallet?.address,
+        totalSupplyWei
+      ]);
+
+      const mintTx = await fireblocksService.callContract(
+        vaultWalletId,
+        custodyRecord.tokenAddress,
+        mintDataBytes,
+        blockchainId,
+        `Mint ${totalSupply} ${tokenSymbol} for ${assetId}`
+      );
+
+      result = {
+        tokenLinkId: mintTx.id,
+        status: 'SUBMITTED'
+      };
+    } else if (existingTokenId) {
       logger.info('Asset already has a tokenId, minting additional tokens', {
         assetId,
         tokenId: existingTokenId,

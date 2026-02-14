@@ -1,5 +1,6 @@
 import express from 'express';
 import * as custodyController from '../modules/custody/custody.controller.js';
+import * as oracleController from '../modules/oracle/oracle.controller.js';
 import { requirePermission, authenticateJwt, authenticate } from '../modules/auth/auth.middleware.js';
 import upload from '../utils/upload.js';
 
@@ -36,6 +37,9 @@ router.post('/dashboard/:id/reject', authenticateJwt, custodyController.rejectCu
 // List custody records from dashboard (JWT auth)
 router.get('/dashboard', authenticateJwt, custodyController.listCustodyRecordsDashboard);
 
+// Update oracle from dashboard (JWT auth)
+router.post('/dashboard/:id/oracle', authenticateJwt, oracleController.updateOracle);
+
 // ============================================
 // API ENDPOINTS (HMAC Authentication)
 // For programmatic/external integrations
@@ -67,5 +71,8 @@ router.get('/', authenticate, requirePermission('read'), custodyController.listC
 
 // Get custody status by asset ID (requires read permission)
 router.get('/:assetId', authenticate, requirePermission('read'), custodyController.getCustodyStatus);
+
+// Update oracle value (requires write or admin permission)
+router.post('/:id/oracle', authenticate, requirePermission('write'), oracleController.updateOracle);
 
 export default router;
