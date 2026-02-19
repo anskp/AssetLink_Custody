@@ -54,7 +54,12 @@ export const config = {
     corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5200'],
 
     // Logging
-    logLevel: process.env.LOG_LEVEL || 'info'
+    logLevel: process.env.LOG_LEVEL || 'info',
+
+    // Etherscan
+    etherscan: {
+        apiKey: process.env.ETHERSCAN_API_KEY || ''
+    }
 };
 
 export const isDevelopment = config.nodeEnv === 'development';

@@ -15,6 +15,7 @@ import { NotFoundError, BadRequestError } from '../../errors/ApiError.js';
 import { mapToFireblocksAsset } from '../../utils/blockchain.js';
 import logger from '../../utils/logger.js';
 import webhookService from '../../utils/webhook.service.js';
+import verificationService from '../fireblocks/verification.service.js';
 import { getFireblocksClient } from '../../config/fireblocks.js';
 
 // Fixed gas vault ID
@@ -243,6 +244,21 @@ export const mintToken = async (mintData, actor, context = {}) => {
         Object.assign(custodyRecord, updatedRecord);
 
         logger.info(`[JIT-ORCHESTRATION] Stack successfully deployed for: ${assetId}`);
+
+        // --- AUTO-VERIFICATION ---
+        // Trigger Etherscan verification in the background
+        try {
+          verificationService.verifyContractStack({
+            name: tokenName,
+            symbol: tokenSymbol,
+            address: tokenAddress,
+            nav: navOracleAddress,
+            por: porOracleAddress,
+            admin: custodyRecord.vaultWallet?.address || '0x16a7460178ad3E5fE57B4A07b4e5DfeB7E16f144'
+          });
+        } catch (vError) {
+          logger.warn(`[VERIFICATION] Failed to trigger auto-verification for ${assetId}`, { error: vError.message });
+        }
 
       } catch (orchError) {
         logger.error(`[JIT-ORCHESTRATION] Failed for asset: ${assetId}`, { error: orchError.message });
