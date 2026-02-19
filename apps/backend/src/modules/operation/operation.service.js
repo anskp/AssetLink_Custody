@@ -507,9 +507,10 @@ export const executeOperation = async (operationId, actor, context = {}) => {
 
         return updated;
     } catch (error) {
-        logger.error('Fireblocks execution failed', { operationId, error: error.message });
+        console.error('🚨 [EXECUTION ERROR] Full Stack Trace:', error);
+        logger.error('Fireblocks execution failed', { operationId, error: error.message, stack: error.stack });
         const errorMessage = error.message.includes('ENOENT') ? 'Fireblocks Secret Key Missing' : error.message;
-        await auditService.logOperationFailed(operationId, { message: errorMessage }, context);
+        await auditService.logOperationFailed(operationId, { message: errorMessage, stack: error.stack }, context);
         const updated = await operationRepository.updateStatus(operationId, OperationStatus.FAILED, {
             failureReason: errorMessage
         });

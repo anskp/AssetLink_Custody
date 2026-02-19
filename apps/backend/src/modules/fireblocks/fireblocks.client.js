@@ -7,6 +7,9 @@
 import { getFireblocksClient } from '../../config/fireblocks.js';
 import { config } from '../../config/env.js';
 import logger from '../../utils/logger.js';
+import { ethers } from 'ethers';
+import fs from 'fs';
+import { FireblocksWeb3Provider, ApiBaseUrl } from "@fireblocks/fireblocks-web3-provider";
 
 /**
  * Check if Fireblocks is properly configured
@@ -140,18 +143,35 @@ export const createWallet = async (vaultId, blockchain) => {
       });
     });
 
-    // Create a deposit address for the asset
-    const addressResponse = await withRetry(async () => {
-      return await fireblocks.vaults.createVaultAccountAssetAddress({
-        vaultAccountId: vaultId,
-        assetId: blockchain,
-        createAddressRequest: {
-          description: `Primary ${blockchain} address`
-        }
+    let address;
+    try {
+      // Create a deposit address for the asset
+      const addressResponse = await withRetry(async () => {
+        return await fireblocks.vaults.createVaultAccountAssetAddress({
+          vaultAccountId: vaultId,
+          assetId: blockchain,
+          createAddressRequest: {
+            description: `Primary ${blockchain} address`
+          }
+        });
       });
-    });
-
-    const address = addressResponse.data.address || addressResponse.data.legacyAddress;
+      address = addressResponse.data.address || addressResponse.data.legacyAddress;
+    } catch (addressError) {
+      if (addressError.message?.includes('not supported')) {
+        logger.info('Address generation not supported/needed, fetching auto-generated address...', { blockchain });
+        const addresses = await fireblocks.vaults.getVaultAccountAssetAddressesPaginated({
+          vaultAccountId: vaultId,
+          assetId: blockchain
+        });
+        if (addresses.data.addresses?.length > 0) {
+          address = addresses.data.addresses[0].address;
+        } else {
+          throw addressError;
+        }
+      } else {
+        throw addressError;
+      }
+    }
 
     logger.info('Wallet created successfully', {
       vaultId,
@@ -452,19 +472,21 @@ export const issueToken = async (vaultId, tokenConfig) => {
 export const makeFireblocksRequest = async (path, method, payload) => {
   const fs = await import('fs');
   const crypto = await import('crypto');
+  const axios = (await import('axios')).default;
 
   const { apiKey, secretKeyPath, baseUrl } = config.fireblocks;
   const secretKey = fs.readFileSync(secretKeyPath, 'utf8');
 
-  // For GET requests, payload is null, so we use an empty string for bodyHash
   const data = payload ? JSON.stringify(payload) : '';
+  const bodyHash = crypto.createHash('sha256').update(data).digest('hex');
+
   const token = {
     uri: path,
-    nonce: crypto.randomBytes(16).toString('hex'),
+    nonce: crypto.randomBytes(32).toString('hex'),
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 55,
     sub: apiKey,
-    bodyHash: payload ? crypto.createHash('sha256').update(data).digest('hex') : crypto.createHash('sha256').update('').digest('hex')
+    bodyHash: bodyHash
   };
 
   const header = { alg: 'RS256', typ: 'JWT' };
@@ -476,77 +498,44 @@ export const makeFireblocksRequest = async (path, method, payload) => {
   }).toString('base64url');
 
   const jwt = `${encodedHeader}.${encodedPayload}.${signature}`;
-  const url = new URL(baseUrl);
-  const hostname = url.hostname;
 
-  const https = await import('https');
+  // baseUrl should be hostname only for manual requests, or use full URL and strip /v1 if path already has it
+  const fullUrl = `${baseUrl.replace(/\/v1$/, '')}${path}`;
 
-  const options = {
-    hostname,
-    path,
-    method,
+  const requestConfig = {
+    url: fullUrl,
+    method: method,
     headers: {
-      'Content-Type': 'application/json',
       'X-API-Key': apiKey,
       'Authorization': `Bearer ${jwt}`
     }
   };
 
-  // Only add Content-Length and body for non-GET methods
-  if (method !== 'GET') {
-    options.headers['Content-Length'] = data.length;
+  if (payload) {
+    requestConfig.data = payload;
+    requestConfig.headers['Content-Type'] = 'application/json';
   }
 
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      let responseData = '';
-      res.on('data', (chunk) => { responseData += chunk; });
-      res.on('end', () => {
-        try {
-          const parsedData = JSON.parse(responseData);
-          if (res.statusCode >= 400) {
-            // Log detailed error information
-            logger.error('Fireblocks API returned error status', {
-              statusCode: res.statusCode,
-              path,
-              method,
-              response: parsedData
-            });
+  try {
+    logger.info(`🛰️ [FIREBLOCKS REQUEST] ${method} ${fullUrl}`, {
+      hasPayload: !!payload,
+      payloadSize: payload ? JSON.stringify(payload).length : 0
+    });
+    const response = await axios(requestConfig);
+    return response.data;
+  } catch (error) {
+    const response = error.response?.data;
+    const status = error.response?.status;
 
-            logger.error(`Fireblocks API error: ${res.statusCode}`, { path, response: parsedData });
-            reject(new Error(parsedData.message || `Fireblocks API Error: ${res.statusCode}`));
-          } else {
-            resolve(parsedData);
-          }
-        } catch (e) {
-          // If response is not JSON, log it as-is
-          logger.error('Failed to parse Fireblocks response', {
-            statusCode: res.statusCode,
-            path,
-            responseData
-          });
-
-          if (res.statusCode >= 400) {
-            reject(new Error(`Fireblocks API Error: ${res.statusCode} - ${responseData}`));
-          } else {
-            resolve(responseData);
-          }
-        }
-      });
+    logger.error('Fireblocks API error', {
+      status,
+      path,
+      method,
+      response: JSON.stringify(response)
     });
 
-    req.on('error', (error) => {
-      logger.error('HTTPS Request Error', { path, error: error.message });
-      logger.error('HTTPS Request Error', { path, error: error.message });
-      reject(error);
-    });
-
-    // Only write body for non-GET methods
-    if (method !== 'GET') {
-      req.write(data);
-    }
-    req.end();
-  });
+    throw new Error(response?.message || `Fireblocks API Error: ${status || error.message}`);
+  }
 };
 
 /**
@@ -651,35 +640,68 @@ export const mintTokens = async (tokenId, vaultAccountId, amount) => {
   }
 };
 
-/**
- * Deploy a contract using Fireblocks CONTRACT_CALL
- */
-export const deployContract = async (vaultId, bytecode, constructorArgs, blockchainId = 'ETH_TEST5') => {
+export const deployContract = async (vaultId, bytecode, constructorArgs, note = '', blockchainId = 'ETH_TEST5') => {
   if (!isConfigured()) {
     logger.warn('SIMULATION: Deploying mock contract');
     return {
       id: `mock_deploy_${Date.now()}`,
-      status: 'SUBMITTED'
+      status: 'SUBMITTED',
+      contractAddress: `0xMockAddress${Date.now()}`
     };
   }
 
-  // Combine bytecode and encoded constructor args
-  const contractCallData = constructorArgs ? bytecode + constructorArgs.replace('0x', '') : bytecode;
+  logger.info(`Deploying contract via FireblocksWeb3Provider...`, { vaultId, note });
 
-  const body = {
-    assetId: blockchainId,
-    source: { type: 'VAULT_ACCOUNT', id: vaultId },
-    destination: {
-      type: 'ONE_TIME_ADDRESS',
-      oneTimeAddress: { address: '0x0000000000000000000000000000000000000000' }
-    },
-    amount: '0',
-    operation: 'CONTRACT_CALL',
-    extraParameters: { contractCallData }
-  };
+  try {
+    const privateKeyPath = config.fireblocks.secretKeyPath;
+    const privateKey = fs.readFileSync(privateKeyPath, "utf8");
 
-  const result = await makeFireblocksRequest('/v1/transactions', 'POST', body);
-  return result;
+    const fbProvider = new FireblocksWeb3Provider({
+      apiKey: config.fireblocks.apiKey,
+      privateKey: privateKey,
+      vaultAccountIds: [String(vaultId)],
+      chainId: 11155111, // Sepolia
+      apiBaseUrl: ApiBaseUrl.Sandbox,
+      logTransactionStatusChanges: false
+    });
+
+    const provider = new ethers.BrowserProvider(fbProvider);
+    const signer = await provider.getSigner();
+
+    // Prepare data
+    // constructorArgs is already encoded by caller (abiCoder.encode outputs hex string with 0x)
+    let data = bytecode;
+    if (constructorArgs) {
+      data += constructorArgs.replace(/^0x/, '');
+    }
+
+    // Send deployment transaction (to: null)
+    const txResponse = await signer.sendTransaction({
+      data: data,
+      // Ethers handles omitting 'to' for deployment
+      gasLimit: 5000000 // Explicit gas limit to bypass estimation errors
+    });
+
+    logger.info(`Deployment TX sent: ${txResponse.hash}. Waiting for confirmation...`);
+
+    const receipt = await txResponse.wait();
+
+    if (receipt.contractAddress) {
+      logger.info(`Contract deployed at: ${receipt.contractAddress} (Block: ${receipt.blockNumber})`);
+      return {
+        id: receipt.hash, // Use hash as ID for compatibility
+        contractAddress: receipt.contractAddress,
+        txHash: receipt.hash
+      };
+    }
+
+    throw new Error(`Deployment failed, no address in receipt: ${receipt.hash}`);
+
+  } catch (error) {
+    logger.error(`Web3 Deployment Failed: ${error.message}`);
+    // Fallback to legacy or throw? Throw is better to stop chain.
+    throw error;
+  }
 };
 
 /**
@@ -714,24 +736,57 @@ export const callContract = async (vaultId, contractAddress, data, blockchainId 
 /**
  * Wait for contract address from a transaction
  */
-export const waitForContractAddress = async (txId, maxAttempts = 20) => {
+export const waitForContractAddress = async (txId, maxAttempts = 30) => {
   let attempts = 0;
+  let contractAddress = null;
+
   while (attempts < maxAttempts) {
     attempts++;
     const tx = await getTransactionById(txId);
 
+    // Check Fireblocks response first
     if (tx.status === 'COMPLETED') {
-      // Fireblocks contractAddress can be in the root or extraParameters
-      return tx.contractAddress || tx.extraParameters?.contractAddress;
-    }
+      contractAddress = tx.contractAddress || tx.extraParameters?.contractAddress;
 
-    if (['FAILED', 'CANCELLED', 'REJECTED', 'BLOCKED'].includes(tx.status)) {
-      throw new Error(`Transaction ${txId} failed with status: ${tx.status}`);
+      if (contractAddress) return contractAddress;
+
+      // Fallback: Blockchain Polling
+      if (tx.txHash && (tx.assetId === 'ETH_TEST5' || tx.assetId === 'ETH_TEST')) {
+        const rpcs = [
+          'https://ethereum-sepolia-rpc.publicnode.com',
+          'https://rpc.ankr.com/eth_sepolia',
+          'https://1rpc.io/sepolia'
+        ];
+
+        for (const rpc of rpcs) {
+          try {
+            // Static network prevents auto-detection errors
+            const network = ethers.Network.from({ name: 'sepolia', chainId: 11155111 });
+            const provider = new ethers.JsonRpcProvider(rpc, network, { staticNetwork: network });
+
+            const receipt = await provider.getTransactionReceipt(tx.txHash);
+            if (receipt?.contractAddress) {
+              contractAddress = receipt.contractAddress;
+              logger.info(`Address resolved via blockchain (${rpc}): ${contractAddress}`);
+              return contractAddress;
+            }
+          } catch (err) {
+            // Silent continue
+          }
+        }
+      }
+
+      if (attempts % 5 === 0) {
+        logger.info(`Waiting for contract address indexing... (Attempt ${attempts}/${maxAttempts})`);
+      }
+    } else if (['FAILED', 'CANCELLED', 'REJECTED', 'BLOCKED'].includes(tx.status)) {
+      throw new Error(`Transaction ${tx.status}: ${tx.subStatus || ''}`);
     }
 
     await new Promise(resolve => setTimeout(resolve, 5000));
   }
-  throw new Error(`Timed out waiting for contract address for TX ${txId}`);
+
+  throw new Error(`Timed out waiting for contract address for TX ${txId} after ${attempts} attempts`);
 };
 
 /**
@@ -761,6 +816,34 @@ export const getTransactionById = async (txId) => {
   }
 };
 
+/**
+ * Transfer tokens between vaults
+ */
+export const transferTokens = async (fromVaultId, toVaultId, assetId, amount, note = '') => {
+  if (!isConfigured()) {
+    logger.warn('SIMULATION: Transferring mock tokens');
+    return { id: `mock_tx_${Date.now()}`, status: 'COMPLETED' };
+  }
+
+  try {
+    const payload = {
+      assetId: assetId,
+      source: { type: 'VAULT_ACCOUNT', id: String(fromVaultId) },
+      destination: { type: 'VAULT_ACCOUNT', id: String(toVaultId) },
+      amount: String(amount),
+      note: note || 'Custody Transfer',
+      feeLevel: 'MEDIUM'
+    };
+
+    logger.info('Transferring tokens on Fireblocks...', { fromVaultId, toVaultId, assetId, amount });
+    const result = await makeFireblocksRequest('/v1/transactions', 'POST', payload);
+    return result;
+  } catch (error) {
+    logger.error('Transfer failed', { fromVaultId, toVaultId, assetId, error: error.message });
+    throw new Error(`Transfer failed: ${error.message}`);
+  }
+};
+
 export default {
   isConfigured,
   createVault,
@@ -769,5 +852,6 @@ export default {
   issueToken,
   getTokenizationStatus,
   mintTokens,
-  getTransactionById
+  getTransactionById,
+  transferTokens
 };

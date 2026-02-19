@@ -149,6 +149,107 @@ export const mintToken = async (mintData, actor, context = {}) => {
     // Check if the vault has sufficient gas, and if not, transfer from vault 88
     await ensureGasForVault(vaultWalletId, blockchainId);
 
+    // --- JUST-IN-TIME RWA ORCHESTRATION ---
+    // If this is an ERC20F RWA and it hasn't been deployed yet, do it now
+    if (!custodyRecord.tokenAddress && custodyRecord.status === CustodyStatus.LINKED) {
+      logger.info(`[JIT-ORCHESTRATION] Deploying contract stack for asset: ${assetId}`);
+
+      const fbVaultId = custodyRecord.vaultWallet?.fireblocksId || vaultWalletId;
+
+      logger.info('[JIT-ORCHESTRATION] Diagnosis:', {
+        assetId,
+        custodyRecordId: custodyRecord.id,
+        hasVaultWalletRelationship: !!custodyRecord.vaultWallet,
+        vaultWalletData: custodyRecord.vaultWallet,
+        resolvedFbVaultId: fbVaultId,
+        fallbackVaultWalletId: vaultWalletId
+      });
+
+      if (!fbVaultId || fbVaultId === 'default' || fbVaultId === 'undefined') {
+        throw new Error(`Invalid Fireblocks Vault ID for deployment: ${fbVaultId}. Ensure asset is properly linked with a vault.`);
+      }
+
+      try {
+        // 1. Gas Funding (from vault 88)
+        await ensureGasForVault(fbVaultId, blockchainId);
+
+        // 2. Deploy NAV Oracle
+        logger.info(`[JIT-ORCHESTRATION] Deploying NAV Oracle for ${assetId}`);
+        const navAbiCoder = new ethers.AbiCoder();
+        const navInitialValue = custodyRecord.initialNav ? ethers.parseUnits(custodyRecord.initialNav.toString(), 8) : 0n;
+        const navArgs = navAbiCoder.encode(
+          ["string", "uint8", "int256"],
+          [`NAV Oracle: ${assetId}`, 8, navInitialValue]
+        );
+        const navDeployTx = await fireblocksService.deployContract(fbVaultId, RWA_ORACLE.bytecode, navArgs, `NAV Oracle: ${assetId}`);
+        const navOracleAddress = navDeployTx.contractAddress || await fireblocksService.waitForContractAddress(navDeployTx.id);
+
+        if (!navOracleAddress) throw new Error('NAV Oracle deployment returned null address');
+        logger.info(`[JIT-ORCHESTRATION] NAV Oracle deployed at: ${navOracleAddress}`);
+
+        // 3. Deploy PoR Oracle
+        logger.info(`[JIT-ORCHESTRATION] Deploying PoR Oracle for ${assetId}`);
+        const porInitialValue = custodyRecord.initialPor ? ethers.parseUnits(custodyRecord.initialPor.toString(), 18) : 0n;
+        const porArgs = navAbiCoder.encode(
+          ["string", "uint8", "int256"],
+          [`PoR Oracle: ${assetId}`, 18, porInitialValue]
+        );
+        const porDeployTx = await fireblocksService.deployContract(fbVaultId, RWA_ORACLE.bytecode, porArgs, `PoR Oracle: ${assetId}`);
+        const porOracleAddress = porDeployTx.contractAddress || await fireblocksService.waitForContractAddress(porDeployTx.id);
+
+        if (!porOracleAddress) throw new Error('PoR Oracle deployment returned null address');
+        logger.info(`[JIT-ORCHESTRATION] PoR Oracle deployed at: ${porOracleAddress}`);
+
+        // 4. Deploy Token Proxy (the actual ERC20F contract)
+        logger.info(`[JIT-ORCHESTRATION] Deploying Token Proxy for ${assetId}`);
+        const uatInterface = new ethers.Interface(UNIQUE_ASSET_TOKEN.abi);
+        const initData = uatInterface.encodeFunctionData("initialize(string,string,address,address,address,address,address)", [
+          tokenName,
+          tokenSymbol,
+          custodyRecord.vaultWallet?.address, // admin
+          custodyRecord.vaultWallet?.address, // minter
+          custodyRecord.vaultWallet?.address, // pauser
+          navOracleAddress,
+          porOracleAddress
+        ]);
+
+        const proxyAbiCoder = new ethers.AbiCoder();
+        const proxyArgs = proxyAbiCoder.encode(
+          ["address", "bytes"],
+          [UAT_IMPLEMENTATION_ADDRESS, initData]
+        );
+
+        const proxyDeployTx = await fireblocksService.deployContract(fbVaultId, FIREBLOCKS_PROXY.bytecode, proxyArgs, `Token Proxy: ${assetId}`);
+        const tokenAddress = proxyDeployTx.contractAddress || await fireblocksService.waitForContractAddress(proxyDeployTx.id);
+        logger.info(`[JIT-ORCHESTRATION] Token Proxy deployed at: ${tokenAddress}`);
+
+        // 5. Update Database Record with Traceability
+        await prisma.custodyRecord.update({
+          where: { id: custodyRecord.id },
+          data: {
+            tokenAddress,
+            navOracleAddress,
+            porOracleAddress,
+            tokenStandard: 'ERC20F',
+            blockchain: blockchainId,
+            navOracleTxHash: navDeployTx.txHash || null,
+            porOracleTxHash: porDeployTx.txHash || null,
+            tokenProxyTxHash: proxyDeployTx.txHash || null
+          }
+        });
+
+        // Refetch record with new addresses for the minting step
+        const updatedRecord = await custodyRepository.findById(custodyRecord.id);
+        Object.assign(custodyRecord, updatedRecord);
+
+        logger.info(`[JIT-ORCHESTRATION] Stack successfully deployed for: ${assetId}`);
+
+      } catch (orchError) {
+        logger.error(`[JIT-ORCHESTRATION] Failed for asset: ${assetId}`, { error: orchError.message });
+        throw new Error(`Asset orchestration failed: ${orchError.message}`);
+      }
+    }
+
     let result;
     const existingTokenId = custodyRecord.tokenId;
 
@@ -175,7 +276,8 @@ export const mintToken = async (mintData, actor, context = {}) => {
 
       result = {
         tokenLinkId: mintTx.id,
-        status: 'SUBMITTED'
+        status: 'SUBMITTED',
+        isERC20FMint: true  // Flag to use tx-based monitoring, not tokenization API
       };
     } else if (existingTokenId) {
       logger.info('Asset already has a tokenId, minting additional tokens', {
@@ -221,8 +323,13 @@ export const mintToken = async (mintData, actor, context = {}) => {
     // Note: We don't await this to avoid blocking the response,
     // but we'll remove the operation key from active monitors after a delay
     try {
-      // Pass the operationId through context to the monitor
-      monitorMintingStatus(result.tokenLinkId, custodyRecord.id, totalSupply.toString(), actor, context);
+      if (result.isERC20FMint) {
+        // ERC20F path: monitor via standard transaction status (not Tokenization API)
+        monitorERC20FMintTx(result.tokenLinkId, custodyRecord.id, totalSupply.toString(), actor, context);
+      } else {
+        // Native Fireblocks tokenization path
+        monitorMintingStatus(result.tokenLinkId, custodyRecord.id, totalSupply.toString(), actor, context);
+      }
     } catch (monitoringError) {
       logger.error('Failed to start mint monitoring', {
         tokenLinkId: result.tokenLinkId,
@@ -433,6 +540,129 @@ const waitForTransferCompletion = async (transferId) => {
   }
 
   throw new Error(`Gas transfer timed out after ${maxAttempts * 5} seconds`);
+};
+
+/**
+ * Monitor an ERC20F mint transaction (via regular /v1/transactions/{id} polling).
+ * Used when minting is done via a raw contract call (not Fireblocks tokenization engine).
+ */
+const monitorERC20FMintTx = async (txId, custodyRecordId, totalSupply, actor, context) => {
+  logger.info('Starting ERC20F mint tx monitoring', { txId, custodyRecordId, totalSupply });
+
+  const maxAttempts = 40;
+  const pollInterval = 5000;
+
+  try {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+      try {
+        const { getTransactionById } = await import('../fireblocks/fireblocks.client.js');
+        const tx = await getTransactionById(txId);
+        const status = tx.status;
+
+        logger.info('ERC20F mint tx status', { txId, status, attempt });
+
+        if (status === 'COMPLETED') {
+          logger.info('ERC20F mint tx completed on-chain', { txId, txHash: tx.txHash });
+
+          // Fetch custody record to get tokenAddress
+          const custodyRecord = await custodyRepository.findById(custodyRecordId);
+          logger.info('ERC20F: current custody record status', {
+            custodyRecordId,
+            currentStatus: custodyRecord?.status,
+            tokenAddress: custodyRecord?.tokenAddress
+          });
+
+          try {
+            await custodyService.updateCustodyStatus(
+              custodyRecordId,
+              CustodyStatus.MINTED,
+              {
+                blockchain: 'ETH_TEST5',
+                tokenStandard: 'ERC20F',
+                tokenAddress: custodyRecord?.tokenAddress,
+                tokenId: custodyRecord?.tokenAddress,
+                quantity: totalSupply || '1',
+                mintedAt: new Date(),
+                mintTxHash: tx.txHash,
+                mintTxId: txId
+              },
+              actor,
+              context
+            );
+            logger.info('✅ ERC20F: custody record updated to MINTED', { custodyRecordId });
+          } catch (updateErr) {
+            logger.error('❌ ERC20F: failed to update custody to MINTED', {
+              custodyRecordId,
+              currentStatus: custodyRecord?.status,
+              error: updateErr.message,
+              stack: updateErr.stack
+            });
+            // If the status transition is already past LINKED (race condition), try a direct DB update
+            if (updateErr.message?.includes('Invalid state transition')) {
+              logger.warn('ERC20F: state transition blocked, attempting direct DB update', { custodyRecordId });
+              await custodyRepository.updateStatus(custodyRecordId, CustodyStatus.MINTED, {
+                blockchain: 'ETH_TEST5',
+                tokenStandard: 'ERC20F',
+                tokenAddress: custodyRecord?.tokenAddress,
+                tokenId: custodyRecord?.tokenAddress,
+                quantity: totalSupply || '1',
+                mintTxHash: tx.txHash,
+                mintTxId: txId
+              });
+              logger.info('✅ ERC20F: direct DB update to MINTED succeeded', { custodyRecordId });
+            }
+          }
+
+          await auditService.logEvent('TOKEN_MINT_CONFIRMED', {
+            txId,
+            txHash: tx.txHash,
+            custodyRecordId,
+            totalSupply
+          }, context);
+
+          webhookService.notifyStatusUpdate('mint.completed', {
+            txId,
+            custodyRecordId,
+            operationId: context?.operationId,
+            status: 'COMPLETED',
+            txHash: tx.txHash
+          });
+
+          return;
+        }
+
+        if (['FAILED', 'CANCELLED', 'REJECTED', 'BLOCKED'].includes(status)) {
+          logger.error('ERC20F mint tx failed on-chain', { txId, status, subStatus: tx.subStatus });
+
+          try {
+            await custodyService.updateCustodyStatus(
+              custodyRecordId,
+              CustodyStatus.FAILED,
+              { failureReason: `Mint tx ${status}: ${tx.subStatus || 'unknown'}` },
+              'SYSTEM',
+              context
+            );
+          } catch (e) {
+            logger.error('ERC20F: failed to update custody to FAILED', { error: e.message });
+            await custodyRepository.updateStatus(custodyRecordId, CustodyStatus.FAILED, {
+              errorMessage: `Mint tx ${status}: ${tx.subStatus || 'unknown'}`
+            });
+          }
+          return;
+        }
+
+      } catch (pollErr) {
+        logger.warn('Error polling ERC20F mint tx', { txId, attempt, error: pollErr.message });
+      }
+    }
+
+    logger.error('ERC20F mint tx monitoring timed out', { txId, custodyRecordId });
+
+  } catch (fatalErr) {
+    logger.error('FATAL error in monitorERC20FMintTx', { txId, custodyRecordId, error: fatalErr.message, stack: fatalErr.stack });
+  }
 };
 
 /**

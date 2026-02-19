@@ -89,6 +89,13 @@ model CustodyRecord {
   listings              Listing[]
   ownerships            Ownership[]
 
+  // JIT Orchestration Traceability
+  navOracleTxHash       String?
+  porOracleTxHash       String?
+  tokenProxyTxHash      String?
+  mintTxHash            String?
+  mintTxId              String?
+
   @@index([assetId])
   @@index([tenantId])
   @@index([createdBy])

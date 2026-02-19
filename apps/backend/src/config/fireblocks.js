@@ -28,8 +28,10 @@ export const initializeFireblocks = () => {
 
         // Determine BasePath from baseUrl
         let basePath = BasePath.Sandbox;
-        if (baseUrl.includes('api.fireblocks.io')) {
-            basePath = BasePath.US; // Or determine based on actual URL
+        if (baseUrl.includes('sandbox-api.fireblocks.io')) {
+            basePath = BasePath.Sandbox;
+        } else if (baseUrl.includes('api.fireblocks.io')) {
+            basePath = BasePath.US; // Default to US production if not sandbox
         }
 
         fireblocksClient = new Fireblocks({

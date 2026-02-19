@@ -7,6 +7,7 @@ import { ethers } from 'ethers';
 import { ConflictError, NotFoundError, BadRequestError } from '../../errors/ApiError.js';
 import logger from '../../utils/logger.js';
 import webhookService from '../../utils/webhook.service.js';
+import prisma from '../../config/db.js';
 
 /**
  * Custody Service
@@ -24,6 +25,14 @@ export const linkAsset = async (assetId, tenantId, createdBy, actor, context = {
     const chainCode = (metadata.blockchain || 'eth').toLowerCase();
     const shortHash = Math.random().toString(36).substring(2, 10);
     const publicContractAddress = `alca_${chainCode}_${shortHash}`;
+
+    console.log('[DEBUG] linkAsset calling createCustodyRecord with:', {
+        assetId,
+        tenantId,
+        createdBy,
+        initialNav: metadata.initialNav,
+        initialPor: metadata.initialPor
+    });
 
     // Create custody record with two-level isolation (PENDING status - awaiting approval)
     const custodyRecord = await custodyRepository.createCustodyRecord(
@@ -52,12 +61,58 @@ export const linkAsset = async (assetId, tenantId, createdBy, actor, context = {
         { ...context, tenantId, createdBy, metadata }
     );
 
-    logger.info('Asset linked to custody with metadata', {
+    logger.info('Asset linked to custody, initializing Fireblocks environment...', {
         assetId,
         tenantId,
         createdBy,
         custodyRecordId: custodyRecord.id
     });
+
+    // --- Fireblocks Setup (User preference: Setup early) ---
+    try {
+        const vaultName = `AssetLink_${tenantId}_${assetId}_${Date.now()}`;
+        const vault = await fireblocksService.createVault(vaultName);
+        const vaultId = vault.id;
+
+        const wallet = await fireblocksService.createWallet(vaultId, 'ETH_TEST5');
+
+        // Create VaultWallet in DB
+        const vaultWalletRecord = await prisma.vaultWallet.create({
+            data: {
+                fireblocksId: vaultId,
+                blockchain: 'ETH_TEST5',
+                address: wallet.address,
+                vaultType: 'CUSTODY',
+                isActive: true
+            }
+        });
+
+        // Activate ETH_TEST5 early
+        try {
+            await fireblocksService.createWallet(vaultId, 'ETH_TEST5');
+            // Wallet already creates it, but let's be sure
+        } catch (e) { }
+
+        // Link the vault wallet to the custody record
+        await custodyRepository.updateStatus(custodyRecord.id, CustodyStatus.PENDING, {
+            vaultWalletId: vaultWalletRecord.id
+        });
+
+        logger.info('Fireblocks environment initialized for asset', {
+            assetId,
+            vaultId,
+            address: wallet.address
+        });
+
+        // Short delay to let Fireblocks settle
+        await new Promise(r => setTimeout(r, 2000));
+    } catch (fbError) {
+        logger.error('Failed to initialize Fireblocks environment during link', {
+            assetId,
+            error: fbError.message
+        });
+        // We still return the custody record, but it will lack a vaultWalletId until manually fixed
+    }
 
     return custodyRecord;
 };
@@ -139,169 +194,27 @@ export const approveCustodyLink = async (id, tenantId, checkerId, context = {}, 
         assetId: custodyRecord.assetId
     });
 
-    // Update status to PENDING (stay in PENDING while background job runs)
-    // We update to LINKED only after the full orchestration is complete
-    const updated = await custodyRepository.updateStatus(id, CustodyStatus.PENDING, {
+    // Final Step: Transition status to LINKED
+    const updated = await custodyRepository.updateStatus(id, CustodyStatus.LINKED, {
         ...metadata,
         approvedBy: checkerId,
-        approvedAt: new Date()
+        approvedAt: new Date(),
+        linkedAt: new Date()
     });
 
     // Log audit event
-    await auditService.logEvent('CUSTODY_APPROVAL_STARTED', {
+    await auditService.logEvent('CUSTODY_APPROVED', {
         assetId: custodyRecord.assetId,
+        action: 'Asset link approved by checker. Orchestration deferred to minting.'
     }, {
         custodyRecordId: id,
         actor: checkerId,
         ...context
     });
 
-    // Start RWA Orchestration in background
-    orchestrateRwaDeployment(id, custodyRecord.tenantId, custodyRecord.assetId, {
-        initialNav: custodyRecord.initialNav,
-        initialPor: custodyRecord.initialPor,
-        assetName: custodyRecord.assetMetadata?.assetName || 'Asset',
-        assetSymbol: custodyRecord.assetMetadata?.customFields?.symbol || 'ASM'
-    }, {
-        actor: checkerId,
-        context
-    });
+    logger.info('Custody link approved', { id, assetId: custodyRecord.assetId });
 
     return enrichCustodyRecord(updated);
-};
-
-/**
- * Background Orchestration for RWA
- * 1. Create Fireblocks Vault & Wallet
- * 2. Deploy NAV Oracle
- * 3. Deploy PoR Oracle
- * 4. Deploy Token Proxy
- */
-const orchestrateRwaDeployment = async (id, tenantId, assetId, rwaData = {}, auditContext = {}) => {
-    try {
-        const prisma = (await import('../../config/db.js')).default;
-        logger.info(`[ORCHESTRATION] Starting RWA deployment for asset: ${assetId}`);
-
-        // 1. Create Vault & Wallet
-        const vaultName = `AssetLink_${tenantId}_${assetId}_${Date.now()}`;
-        const vault = await fireblocksService.createVault(vaultName);
-        const vaultId = vault.id;
-
-        const wallet = await fireblocksService.createWallet(vaultId, 'ETH_TEST5');
-        const vaultWalletRecord = await prisma.vaultWallet.create({
-            data: {
-                fireblocksId: vaultId,
-                blockchain: 'ETH_TEST5',
-                address: wallet.address,
-                vaultType: 'CUSTODY',
-                isActive: true
-            }
-        });
-
-        await custodyRepository.updateStatus(id, CustodyStatus.PENDING, {
-            vaultWalletId: vaultWalletRecord.id
-        });
-
-        // 2. Deploy NAV Oracle
-        logger.info(`[ORCHESTRATION] Deploying NAV Oracle for ${assetId}`);
-        const navAbiCoder = ethers.AbiCoder.defaultAbiCoder();
-        // NAV usually 8 decimals. initialNav is a string like "400"
-        const navInitialValue = rwaData.initialNav ? ethers.parseUnits(rwaData.initialNav, 8) : 0n;
-        const navArgs = navAbiCoder.encode(
-            ["string", "uint8", "int256"],
-            [`NAV Oracle for ${rwaData.assetName}`, 8, navInitialValue]
-        );
-        const navDeployTx = await fireblocksService.deployContract(vaultId, RWA_ORACLE.bytecode, navArgs);
-        const navOracleAddress = await fireblocksService.waitForContractAddress(navDeployTx.id);
-        logger.info(`[ORCHESTRATION] NAV Oracle deployed at: ${navOracleAddress}`);
-
-        // 3. Deploy PoR Oracle
-        logger.info(`[ORCHESTRATION] Deploying PoR Oracle for ${assetId}`);
-        const porInitialValue = rwaData.initialPor ? ethers.parseUnits(rwaData.initialPor, 18) : 0n;
-        const porArgs = navAbiCoder.encode(
-            ["string", "uint8", "int256"],
-            [`PoR Oracle for ${rwaData.assetName}`, 18, porInitialValue]
-        );
-        const porDeployTx = await fireblocksService.deployContract(vaultId, RWA_ORACLE.bytecode, porArgs);
-        const porOracleAddress = await fireblocksService.waitForContractAddress(porDeployTx.id);
-        logger.info(`[ORCHESTRATION] PoR Oracle deployed at: ${porOracleAddress}`);
-
-        // 4. Deploy Token Proxy
-        logger.info(`[ORCHESTRATION] Deploying Token Proxy for ${assetId}`);
-        const uatInterface = new ethers.Interface(UNIQUE_ASSET_TOKEN.abi);
-
-        // Encode initialize call
-        const initData = uatInterface.encodeFunctionData("initialize", [
-            rwaData.assetName,
-            rwaData.assetSymbol,
-            wallet.address, // admin
-            wallet.address, // minter
-            wallet.address, // pauser
-            navOracleAddress,
-            porOracleAddress
-        ]);
-
-        const proxyAbiCoder = ethers.AbiCoder.defaultAbiCoder();
-        const proxyArgs = proxyAbiCoder.encode(
-            ["address", "bytes"],
-            [UAT_IMPLEMENTATION_ADDRESS, initData]
-        );
-
-        const proxyDeployTx = await fireblocksService.deployContract(vaultId, FIREBLOCKS_PROXY.bytecode, proxyArgs);
-        const tokenAddress = await fireblocksService.waitForContractAddress(proxyDeployTx.id);
-        logger.info(`[ORCHESTRATION] Token Proxy deployed at: ${tokenAddress}`);
-
-        // Final Update
-        await prisma.custodyRecord.update({
-            where: { id },
-            data: {
-                status: CustodyStatus.LINKED,
-                tokenAddress,
-                navOracleAddress,
-                porOracleAddress,
-                blockchain: 'ETH_TEST5',
-                tokenStandard: 'ERC20F',
-                linkedAt: new Date()
-            }
-        });
-
-        // Log audit event
-        await auditService.logEvent('CUSTODY_APPROVED', {
-            assetId,
-            tokenAddress,
-            navOracleAddress,
-            porOracleAddress,
-            vaultId
-        }, {
-            custodyRecordId: id,
-            actor: auditContext.actor,
-            ...auditContext.context
-        });
-
-        // Notify COPYm that custody linking is complete
-        webhookService.notifyStatusUpdate('custody.completed', {
-            id,
-            status: CustodyStatus.LINKED,
-            assetId,
-            vaultId,
-            tokenAddress
-        });
-
-        logger.info(`[ORCHESTRATION] Completed RWA deployment for asset: ${assetId}`);
-
-    } catch (error) {
-        logger.error(`[ORCHESTRATION] Failed for asset: ${assetId}`, { error: error.message });
-        await custodyRepository.updateStatus(id, CustodyStatus.FAILED, {
-            errorMessage: `Orchestration failed: ${error.message}`
-        });
-
-        webhookService.notifyStatusUpdate('custody.failed', {
-            id,
-            status: 'FAILED',
-            assetId,
-            error: error.message
-        });
-    }
 };
 
 /**

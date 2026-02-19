@@ -58,6 +58,8 @@ const payload = {
 const result = await fireblocksClient.makeFireblocksRequest('/v1/transactions', 'POST', payload);
 ```
 
+> **Note**: Just like the minting process, all on-chain operations (Mint, Burn, Transfer) now use the **Standard Transaction API (/v1/transactions)** for monitoring. We have retired the specialized Tokenization API for custom ERC20F tokens to ensure consistent finality tracking and full traceability of transaction hashes.
+
 ---
 
 ## 4. Token Freezing (Internal)

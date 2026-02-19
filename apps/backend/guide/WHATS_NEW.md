@@ -1,10 +1,18 @@
-# 🎉 What's New - Marketplace UI
+# 🎉 What's New - Marketplace & RWA Engine
 
 ## Summary
 
-Added a **complete marketplace UI** with minimal, clean design. Issuers can list tokens, investors can buy them, all with zero gas fees and instant settlement!
+This update introduces a **complete marketplace UI** for off-chain trading and a **re-engineered RWA Tokenization Engine** featuring JIT Orchestration and Fireblocks Transaction API monitoring.
 
-## ✨ New Features
+## 🚀 RWA Tokenization Engine 2.0
+We have completely overhauled how RWA tokens are deployed and managed:
+- **JIT Orchestration**: Smart contracts (Oracles + Proxy) are now deployed "Just-In-Time" upon approval.
+- **Transaction API Switch**: Migrated from the Fireblocks Tokenization Engine to the **Transaction API (/v1/transactions)** for custom ERC20F tokens to support multi-oracle initialization.
+- **Full Traceability**: Every contract deployment step now captures and stores its unique transaction hash in the ledger.
+- **Web3 Provider Integration**: Switched to `@fireblocks/fireblocks-web3-provider` for robust contract deployments.
+- **Checksum Security**: Enforced EIP-55 checksums on all contract addresses.
+
+## ✨ New UI Features
 
 ### For Issuers
 - 📝 **List Tokens** - Put minted tokens up for sale

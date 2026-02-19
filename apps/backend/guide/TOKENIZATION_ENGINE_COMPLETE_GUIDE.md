@@ -1,8 +1,27 @@
 # Complete Tokenization Engine Guide - Fireblocks Integration
 
 > **Project**: COPYm Platform Tokenization System  
-> **Last Updated**: December 26, 2025  
-> **Purpose**: Complete documentation of tokenization process using Fireblocks API for external projects
+> **Last Updated**: February 19, 2026  
+> **Status**: ⚠️ **LEGACY / MIGRATED** ⚠️
+
+---
+
+## 🛑 IMPORTANT: Migration Notice (Feb 2026)
+As of Feb 19, 2026, the **Fireblocks Tokenization API (Tokenization Engine)** has been replaced for custom RWA tokens in favor of a **JIT (Just-In-Time) Orchestration Flow** using the **Standard Transaction API (/v1/transactions)**.
+
+### Why was this changed?
+1. **Custom Initialization**: Custom `ERC20F` tokens require specific initialization (multi-oracle support) that the native Tokenization Engine couldn't support.
+2. **Reliability**: Using a raw `CONTRACT_CALL` via the Fireblocks Web3 Provider provides better error handling and EIP-55 checksum validation.
+3. **Traceability**: The new flow captures individual transaction hashes for every contract in the stack (NAV Oracle, PoR Oracle, Token Proxy).
+
+### New Recommended Guides:
+- 📖 **New Sprint Guide**: `src/guide/sprint6.md` (RWA Tokenization & JIT)
+- 📖 **New Integration Guide**: `docs/09-RWA-TOKENIZATION-GUIDE.md`
+
+---
+
+> **Purpose**: Legacy documentation of the original tokenization process.
+
 
 ---
 

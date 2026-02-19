@@ -14,19 +14,32 @@ import { CustodyStatus } from '../../enums/custodyStatus.js';
  * @param {string} status - Initial status
  */
 export const createCustodyRecord = async (assetId, tenantId, createdBy, status = CustodyStatus.LINKED, publicContractAddress = null, extra = {}) => {
-    const { initialNav, initialPor } = extra;
-    return await prisma.custodyRecord.create({
-        data: {
-            assetId: String(assetId),
-            tenantId,
-            createdBy,
-            status,
-            publicContractAddress,
-            initialNav,
-            initialPor,
-            linkedAt: status === CustodyStatus.LINKED ? new Date() : null
-        }
+    console.log('[DEBUG] createCustodyRecord Args:', {
+        assetId,
+        tenantId,
+        createdBy,
+        status,
+        publicContractAddress,
+        extraType: typeof extra,
+        initialNav: extra?.initialNav,
+        initialPor: extra?.initialPor
     });
+
+    const data = {
+        assetId: String(assetId),
+        tenantId,
+        createdBy,
+        status,
+        publicContractAddress: publicContractAddress || null,
+        linkedAt: status === CustodyStatus.LINKED ? new Date() : null
+    };
+
+    if (extra && extra.initialNav !== undefined) data.initialNav = String(extra.initialNav);
+    if (extra && extra.initialPor !== undefined) data.initialPor = String(extra.initialPor);
+
+    console.log('[DEBUG] Creating CustodyRecord:', JSON.stringify(data));
+
+    return await prisma.custodyRecord.create({ data });
 };
 
 /**
@@ -80,9 +93,20 @@ export const updateStatus = async (id, newStatus, metadata = {}) => {
         updateData.burnedAt = new Date();
     }
 
-    // Update vaultWalletId regardless of status if provided in metadata
+    // Update metadata fields if provided
     if (metadata.vaultWalletId) updateData.vaultWalletId = metadata.vaultWalletId;
     if (metadata.errorMessage) updateData.errorMessage = metadata.errorMessage;
+    if (metadata.initialNav) updateData.initialNav = String(metadata.initialNav);
+    if (metadata.initialPor) updateData.initialPor = String(metadata.initialPor);
+    if (metadata.navOracleAddress) updateData.navOracleAddress = metadata.navOracleAddress;
+    if (metadata.porOracleAddress) updateData.porOracleAddress = metadata.porOracleAddress;
+
+    // Traceability Fields
+    if (metadata.navOracleTxHash) updateData.navOracleTxHash = metadata.navOracleTxHash;
+    if (metadata.porOracleTxHash) updateData.porOracleTxHash = metadata.porOracleTxHash;
+    if (metadata.tokenProxyTxHash) updateData.tokenProxyTxHash = metadata.tokenProxyTxHash;
+    if (metadata.mintTxHash) updateData.mintTxHash = metadata.mintTxHash;
+    if (metadata.mintTxId) updateData.mintTxId = metadata.mintTxId;
 
     return await prisma.custodyRecord.update({
         where: { id },
